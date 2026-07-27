@@ -227,9 +227,10 @@ function boot(){
       if(r.key==='prefs') S.prefs = Object.assign(S.prefs, r.value||{});
       if(r.key==='store') S.store = Object.assign(S.store, r.value||{});
       if(r.key==='drive' && r.value && r.value.root_url) CFG.driveUrl = r.value.root_url;
+      if(r.key==='auth') S.auth = r.value||{};
     });
     S.cats = res[1]||[];
-    if(!S.user){ askUser(); }
+    gate();
     render();
   }).catch(function(e){
     render();
@@ -684,7 +685,7 @@ routes.more = function(){
     + '<a class="menu-item" href="'+CFG.driveUrl+'" target="_blank"><span class="mi">📁</span> เปิดโฟลเดอร์ Google Drive<span class="arr">↗</span></a>'
     + '<a class="menu-item" href="'+CFG.url+'" target="_blank"><span class="mi">🗃</span> ฐานข้อมูล Supabase<span class="arr">↗</span></a>'
     + '</div>'
-    + '<div class="help" style="text-align:center">ผู้ใช้ปัจจุบัน: '+esc(S.user||'-')+' · <a href="javascript:askUser()" style="color:var(--green)">เปลี่ยน</a></div>');
+    + '<div class="help" style="text-align:center">ผู้ใช้ปัจจุบัน: '+esc(S.user||'-')+' · <a href="javascript:askUser()" style="color:var(--green)">เปลี่ยน</a> · <a href="javascript:logout()" style="color:var(--red)">ออกจากระบบ</a></div>');
 };
 function mItem(href,ic,name){ return '<a class="menu-item" href="'+href+'"><span class="mi">'+ic+'</span> '+name+'<span class="arr">›</span></a>'; }
 
@@ -1090,6 +1091,7 @@ routes.settings = function(){
     + '<button class="chip '+(pf.year_format!=='be'?'on':'')+'" onclick="setYear(\'ce\')">ค.ศ.</button></div>'
     + '<div class="row" style="margin-top:12px"><label style="margin:0">เปิดใช้ VAT</label><span class="spacer"></span><input type="checkbox" id="st_vat" style="width:22px;height:22px" '+(pf.vat_enabled?'checked':'')+'></div>'
     + '<label>อัตรา VAT (%)</label><input type="number" inputmode="numeric" id="st_vatrate" value="'+(pf.vat_rate||7)+'">'
+    + '<label>เปลี่ยนรหัสผ่านเข้าระบบ (ใช้ร่วมกันทั้งทีม)</label><input inputmode="numeric" id="st_pin" placeholder="เว้นว่างไว้ = ไม่เปลี่ยน">'
     + '</div>'
     + '<button class="btn btn-p btn-block" onclick="saveSettings()">💾 บันทึกการตั้งค่า</button>'
     + '<div class="help" style="margin:14px 0;text-align:center">ข้อมูลถูกเก็บที่ Supabase (ap-southeast-1) · เวลา Asia/Bangkok · สกุลเงิน THB</div>');
@@ -1212,6 +1214,82 @@ routes.check = function(){
     }
     V(h);
   }).catch(function(){ V('<div class="card"><div class="empty">โหลดไม่สำเร็จ<br><button class="btn btn-s" style="margin-top:8px" onclick="render()">ลองอีกครั้ง</button></div></div>'); });
+};
+
+/* ================== LOGIN GATE ================== */
+function gate(){
+  if(localStorage.getItem('sa_auth_ok')==='1' && S.user){ return; }
+  var old=document.getElementById('gateBg'); if(old) old.remove();
+  var bg=document.createElement('div'); bg.id='gateBg';
+  bg.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+  bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center">'
+    +'<div style="font-size:44px">🔒</div><h2 style="margin:8px 0">'+esc(S.store.name||'บัญชีร้าน')+'</h2>'
+    +'<div class="help" style="margin-bottom:10px">ใส่รหัสผ่านร้านเพื่อเข้าใช้งาน</div>'
+    +'<input type="password" inputmode="numeric" id="gatePin" placeholder="รหัสผ่าน" style="text-align:center;font-size:22px;letter-spacing:6px">'
+    +'<div id="gateErr" class="help" style="color:var(--red);margin-top:6px"></div>'
+    +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="gatePinOk()">เข้าสู่ระบบ</button></div>';
+  document.body.appendChild(bg);
+  var i=document.getElementById('gatePin');
+  if(i) i.addEventListener('keydown', function(e){ if(e.key==='Enter') gatePinOk(); });
+  if(localStorage.getItem('sa_auth_ok')==='1'){ gateUsers(); }
+}
+function gatePinOk(){
+  var v=(document.getElementById('gatePin')||{value:''}).value.trim();
+  var pin=(S.auth && S.auth.pin)? String(S.auth.pin) : '1234';
+  if(v!==pin){ var er=document.getElementById('gateErr'); if(er) er.textContent='รหัสไม่ถูกต้อง ลองอีกครั้ง'; return; }
+  localStorage.setItem('sa_auth_ok','1');
+  gateUsers();
+}
+function gateUsers(){
+  var bg=document.getElementById('gateBg'); if(!bg) return;
+  bg.innerHTML='<div class="help" style="text-align:center">กำลังโหลดรายชื่อ...</div>';
+  api('transactions?select=created_by&limit=1000').then(function(rows){
+    var names={};
+    (rows||[]).forEach(function(r){ if(r.created_by && r.created_by!=='unknown' && r.created_by!=='claude-test') names[r.created_by]=1; });
+    ((S.auth && S.auth.users)||[]).forEach(function(n){ names[n]=1; });
+    if(S.user) names[S.user]=1;
+    var list=Object.keys(names).sort();
+    bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center">'
+      +'<div style="font-size:44px">👤</div><h2 style="margin:8px 0">คุณคือใคร?</h2>'
+      +'<div class="help" style="margin-bottom:10px">เลือกชื่อของคุณ (ใช้ระบุว่าใครเป็นคนบันทึก)</div>'
+      +'<div class="chips" style="justify-content:center">'
+      +list.map(function(n){ return '<button class="chip" onclick="gatePick(this.textContent)">'+esc(n)+'</button>'; }).join('')
+      +'</div>'
+      +'<input id="gateNew" placeholder="หรือพิมพ์ชื่อใหม่" style="margin-top:12px;text-align:center">'
+      +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="gatePick(document.getElementById(\'gateNew\').value.trim())">ใช้ชื่อนี้</button></div>';
+  }).catch(function(){
+    bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center"><h2>คุณคือใคร?</h2>'
+      +'<input id="gateNew" placeholder="พิมพ์ชื่อของคุณ" style="margin-top:12px;text-align:center">'
+      +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="gatePick(document.getElementById(\'gateNew\').value.trim())">เริ่มใช้งาน</button></div>';
+  });
+}
+function gatePick(n){
+  if(!n){ toast('เลือกหรือพิมพ์ชื่อก่อน'); return; }
+  S.user=n; localStorage.setItem('sa_user', n);
+  var a=S.auth||{}; var u=a.users||[];
+  if(u.indexOf(n)<0){ u.push(n); a.users=u; S.auth=a;
+    api('settings?key=eq.auth',{method:'PATCH',body:{value:a,updated_at:new Date().toISOString()}}).catch(function(){});
+  }
+  var bg=document.getElementById('gateBg'); if(bg) bg.remove();
+  audit('login','user',null,{name:n});
+  toast('สวัสดี '+n+' 👋'); render();
+}
+function logout(){
+  localStorage.removeItem('sa_auth_ok');
+  localStorage.removeItem('sa_user');
+  location.reload();
+}
+var _saveSettingsOrig = saveSettings;
+saveSettings = function(){
+  _saveSettingsOrig();
+  var el=document.getElementById('st_pin');
+  var np=el? el.value.trim() : '';
+  if(np){
+    S.auth=S.auth||{}; S.auth.pin=np;
+    api('settings?key=eq.auth',{method:'PATCH',body:{value:S.auth,updated_at:new Date().toISOString()}})
+      .then(function(){ toast('เปลี่ยนรหัสผ่านแล้ว ✓ (มีผลกับทุกคนในทีม)'); el.value=''; })
+      .catch(function(){ toast('เปลี่ยนรหัสไม่สำเร็จ'); });
+  }
 };
 
 boot();
