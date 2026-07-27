@@ -255,7 +255,7 @@ routes.home = function(){
   Promise.all([
     api('transactions?select=txn_type,amount,txn_date,review_status,document_id&txn_date=gte.'+m+'&order=txn_date.desc&limit=1000'),
     api('transactions?select=id,txn_type,amount,txn_date,party_name,category_name,description,review_status&order=created_at.desc&limit=5'),
-    count('documents','ocr_status=eq.failed'),
+    count('documents','ocr_status=eq.failed&status=neq.linked'),
     count('transactions','review_status=eq.pending')
   ]).then(function(res){
     var rows = res[0]||[], recent = res[1]||[];
@@ -281,7 +281,7 @@ routes.home = function(){
       + '<button class="btn btn-s" onclick="location.hash=\'#/docs/upload\'">📷 ถ่าย/อัปโหลดใบเสร็จ</button>'
       + '</div></div>';
     var warn = [];
-    if(res[3]>0) warn.push('<a class="menu-item" href="#/list" style="border:none;padding:8px 0"><span class="mi">🕐</span> รายการรอตรวจสอบ <span class="badge b-warn" style="margin-left:6px">'+res[3]+'</span><span class="arr">›</span></a>');
+    if(res[3]>0) warn.push('<a class="menu-item" href="javascript:goPending()" style="border:none;padding:8px 0"><span class="mi">🕐</span> รายการรอตรวจสอบ <span class="badge b-warn" style="margin-left:6px">'+res[3]+'</span><span class="arr">›</span></a>');
     if(res[2]>0) warn.push('<a class="menu-item" href="#/docs" style="border:none;padding:8px 0"><span class="mi">⚠️</span> เอกสาร OCR ไม่สำเร็จ <span class="badge b-err" style="margin-left:6px">'+res[2]+'</span><span class="arr">›</span></a>');
     if(noDoc>0) warn.push('<div class="menu-item" style="border:none;padding:8px 0"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span></div>');
     if(warn.length) h += '<div class="card"><b>งานที่ต้องทำต่อ</b>'+warn.join('')+'</div>';
@@ -314,6 +314,7 @@ routes.list = function(){
         var names={'':'ทั้งหมด',income:'รายรับ',expense:'รายจ่าย',purchase:'ซื้อวัตถุดิบ',sale:'ยอดขาย'};
         return '<button class="chip '+(f.type===tp?'on':'')+'" onclick="setListType(\''+tp+'\')">'+names[tp]+'</button>';
       }).join('')
+    + '<button class="chip '+(f.pending?'on':'')+'" onclick="togglePending()">🕐 รอตรวจ</button>'
     + '</div>'
     + '<div class="grid2 no-print" style="margin-bottom:10px">'
     + '<div><label style="margin-top:0">จากวันที่</label><input type="date" id="fFrom" value="'+esc(f.from)+'"></div>'
@@ -330,6 +331,7 @@ function debounce(fn,ms){ var t; return function(){ var a=arguments,c=this; clea
 function loadList(){
   var f=S.lastList, q='transactions?select=*&order=txn_date.desc,created_at.desc&limit=200';
   if(f.type) q+='&txn_type=eq.'+f.type;
+  if(f.pending) q+='&review_status=eq.pending';
   if(f.from) q+='&txn_date=gte.'+f.from;
   if(f.to) q+='&txn_date=lte.'+f.to;
   if(f.q){ var s=encodeURIComponent('%'+f.q+'%'); q+='&or=(party_name.ilike.'+s+',category_name.ilike.'+s+',description.ilike.'+s+',doc_no.ilike.'+s+',note.ilike.'+s+')'; }
@@ -657,7 +659,7 @@ routes.docs = function(args){
         : r.ocr_status==='failed'? '<span class="badge b-err">OCR ล้มเหลว</span>'
         : '<span class="badge b-mut">ยังไม่ได้อ่าน</span>';
       var link = r.status==='linked'? ' <span class="badge b-ok">เชื่อมรายการแล้ว</span>':' <span class="badge b-warn">Inbox</span>';
-      return '<div class="item"><div class="ic ic-doc">📄</div>'
+      return '<div class="item" onclick="docSheet(\''+r.id+'\')"><div class="ic ic-doc">📄</div>'
         + '<div class="main"><div class="t1">'+esc(r.file_name||r.storage_path||'ไฟล์')+'</div>'
         + '<div class="t2">'+fmtDate(r.created_at)+' · '+esc(r.doc_type||'ไม่ทราบประเภท')+'</div>'
         + '<div style="margin-top:3px">'+st+link+'</div></div>'
@@ -1291,6 +1293,74 @@ saveSettings = function(){
       .catch(function(){ toast('เปลี่ยนรหัสไม่สำเร็จ'); });
   }
 };
+
+/* ================== DOCUMENT ACTIONS ================== */
+function docSheet(id){
+  api('documents?select=*&id=eq.'+id).then(function(rows){
+    var d=rows&&rows[0]; if(!d){ toast('ไม่พบเอกสาร'); return; }
+    var img = (d.mime_type||'').indexOf('image')===0 ? '<img src="'+CFG.url+'/storage/v1/object/public/receipts/'+d.storage_path+'" style="width:100%;max-height:280px;object-fit:contain;border-radius:10px;background:#eef0f1">' : '';
+    var st = d.ocr_status==='done'?'<span class="badge b-ok">OCR สำเร็จ</span>': d.ocr_status==='failed'?'<span class="badge b-err">OCR ล้มเหลว</span>':'<span class="badge b-mut">ยังไม่ได้อ่าน</span>';
+    var link = d.status==='linked'?'<span class="badge b-ok">เชื่อมรายการแล้ว</span>':'<span class="badge b-warn">ยังไม่เชื่อมรายการ</span>';
+    sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>'+esc(d.file_name||'เอกสาร')+'</h3>'
+      +'<div style="margin:6px 0">'+st+' '+link+' <span class="badge b-mut">'+esc(d.doc_type||'unknown')+'</span></div>'
+      + img
+      +'<div id="docSheetMsg" class="help" style="margin-top:6px"></div>'
+      +'<div style="display:grid;gap:8px;margin-top:12px">'
+      + (d.status!=='linked'? '<button class="btn btn-p" onclick="docCreateTxn(\''+d.id+'\')">＋ สร้างรายการจากเอกสารนี้</button>':'')
+      +'<button class="btn btn-s" onclick="docRetryOcr(\''+d.id+'\')">🔁 อ่านด้วย AI อีกครั้ง</button>'
+      +'<button class="btn btn-s" onclick="openDocFile(\''+d.id+'\')">📄 เปิดไฟล์เต็ม</button>'
+      +'<button class="btn btn-d" onclick="docDelete(\''+d.id+'\')">🗑 ลบเอกสารนี้ (กด 2 ครั้งเพื่อยืนยัน)</button>'
+      +'</div>');
+  }).catch(function(){ toast('โหลดเอกสารไม่สำเร็จ'); });
+}
+function docFetchB64(d){
+  return fetch(CFG.url+'/storage/v1/object/public/receipts/'+d.storage_path)
+    .then(function(r){ if(!r.ok) throw new Error('โหลดไฟล์ต้นฉบับไม่ได้'); return r.blob(); })
+    .then(function(b){ return new Promise(function(res,rej){ var fr=new FileReader(); fr.onload=function(){ res(String(fr.result).split(',')[1]); }; fr.onerror=rej; fr.readAsDataURL(b); }); });
+}
+function docRetryOcr(id){
+  var msg=document.getElementById('docSheetMsg'); if(msg) msg.textContent='🤖 AI กำลังอ่านเอกสาร... (5-15 วินาที)';
+  api('documents?select=*&id=eq.'+id).then(function(rows){
+    var d=rows[0];
+    return docFetchB64(d).then(function(b64){
+      return fetch(CFG.fnUrl+'/ocr',{method:'POST',headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key,'Content-Type':'application/json'},body:JSON.stringify({image_base64:b64,mime_type:d.mime_type||'image/jpeg'})});
+    });
+  }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+  .then(function(res){
+    if(!res.ok||res.j.error) throw new Error(res.j.error||'OCR ผิดพลาด');
+    var data=res.j.data||{};
+    return api('documents?id=eq.'+id,{method:'PATCH',body:{ocr_status:'done',ocr_json:data,doc_type:data.doc_type||'unknown',ocr_confidence:data.confidence||null,ocr_text:data.raw_text||null,updated_at:new Date().toISOString()}}).then(function(){
+      audit('reocr','document',id,{});
+      toast('อ่านสำเร็จ: '+(data.vendor_name||'ไม่ทราบร้าน')+' ฿'+(data.total!=null?data.total:'?'));
+      docSheet(id);
+    });
+  }).catch(function(e){
+    api('documents?id=eq.'+id,{method:'PATCH',body:{ocr_status:'failed',updated_at:new Date().toISOString()}}).catch(function(){});
+    var m2=document.getElementById('docSheetMsg'); if(m2) m2.innerHTML='<span class="badge b-err">'+esc(String(e.message||e).slice(0,140))+'</span>';
+  });
+}
+function docCreateTxn(id){
+  api('documents?select=*&id=eq.'+id).then(function(rows){
+    var d=rows[0]; closeSheet();
+    localStorage.removeItem('sa_draft');
+    nav('#/add');
+    setTimeout(function(){
+      addState.docId=d.id;
+      var stEl=document.getElementById('docStatus'); if(stEl) stEl.innerHTML='📎 แนบเอกสาร: '+esc(d.file_name||'ไฟล์')+' <span class="badge b-ok">พร้อมบันทึก</span>';
+      if(d.ocr_json){ applyOcr(d.ocr_json); }
+      else toast('เอกสารแนบแล้ว — กรอกข้อมูลแล้วกดบันทึก');
+    }, 400);
+  });
+}
+function docDelete(id){
+  if(window.__docDelOk!==id){ window.__docDelOk=id; toast('กดลบอีกครั้งภายใน 3 วินาทีเพื่อยืนยัน'); setTimeout(function(){ if(window.__docDelOk===id) window.__docDelOk=null; },3000); return; }
+  window.__docDelOk=null;
+  api('documents?id=eq.'+id,{method:'DELETE'}).then(function(){
+    audit('delete','document',id,{}); closeSheet(); toast('ลบเอกสารแล้ว'); render();
+  }).catch(function(){ toast('ลบไม่ได้ — เอกสารนี้เชื่อมกับรายการอยู่ ให้ลบรายการนั้นก่อน'); });
+}
+function togglePending(){ S.lastList.pending=!S.lastList.pending; routes.list(); }
+function goPending(){ S.lastList={q:'',type:'',from:'',to:'',pending:true}; if(location.hash==='#/list'){ routes.list(); } else { nav('#/list'); } }
 
 boot();
 render();
