@@ -1156,6 +1156,21 @@ function aiSend(){
         +trRow('หมวด', t.category_name)+trRow('คู่ค้า', t.party_name)+trRow('รายละเอียด', t.description)
         +'</table><div class="grid2" style="margin-top:8px"><button class="btn btn-t" onclick="aiCancel()">ยกเลิก</button>'
         +'<button class="btn btn-p" onclick="aiConfirm(this)">✓ บันทึกตามนี้</button></div></div>');
+    } else if(d.action==='add_ingredient' && d.ingredient){
+      var g=d.ingredient; window.__aiIng=g;
+      var unitCost=(g.pack_price!=null && g.units_per_pack)? (Number(g.pack_price)/Number(g.units_per_pack)) : null;
+      aiPush('<div class="card" style="background:#f2f8f5"><b>เพิ่มวัตถุดิบนี้?</b>'
+        +'<table class="rep" style="margin-top:6px">'
+        +trRow('ชื่อวัตถุดิบ', g.name_th)
+        +trRow('หน่วยที่ซื้อ', g.buy_unit)
+        +trRow('ได้ปริมาณ', (g.units_per_pack!=null? g.units_per_pack+' '+(g.use_unit||''):null))
+        +trRow('ราคาซื้อ', g.pack_price!=null? '฿'+fmtMoney(g.pack_price):null)
+        +trRow('ต้นทุนต่อ'+(g.use_unit||'หน่วย'), unitCost!=null? '฿'+unitCost.toFixed(4):null)
+        +trRow('แหล่งซื้อ', g.source)
+        +'</table>'
+        +(g.pack_price==null? '<div class="help" style="color:#96700f;margin-top:4px">⚠️ ยังไม่มีราคา — บันทึกได้ แล้วค่อยเติมราคาทีหลังในหน้าวัตถุดิบ</div>':'')
+        +'<div class="grid2" style="margin-top:8px"><button class="btn btn-t" onclick="aiCancel()">ยกเลิก</button>'
+        +'<button class="btn btn-p" onclick="aiConfirmIng(this)">✓ บันทึกวัตถุดิบ</button></div></div>');
     } else if(d.answer){
       aiPush('<div style="margin:8px 0"><span style="background:#fff;border:1px solid var(--line);padding:8px 12px;border-radius:12px;display:inline-block">🤖 '+esc(d.answer)+'</span></div>');
     } else {
@@ -1411,6 +1426,29 @@ function aiBuildContext(){
   }).catch(function(){
     return 'Business data unavailable right now.';
   });
+}
+
+function aiConfirmIng(btn){
+  var g=window.__aiIng; if(!g){ toast('ไม่มีวัตถุดิบรอยืนยัน'); return; }
+  btn.disabled=true;
+  var conv=Number(g.units_per_pack)||1;
+  var price=(g.pack_price!=null)? Number(g.pack_price) : null;
+  api('ingredients',{method:'POST',prefer:'return=representation',body:{
+    name_th:g.name_th||'วัตถุดิบใหม่',
+    buy_unit:g.buy_unit||null, use_unit:g.use_unit||null,
+    conversion:conv, pack_size:conv,
+    last_price:price,
+    cost_per_use_unit: price!=null? +(price/conv).toFixed(4):null,
+    source:g.source||null,
+    last_purchase_date: price!=null? todayISO():null
+  }}).then(function(rows){
+    var rid=rows&&rows[0]&&rows[0].id;
+    if(price!=null && rid) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:g.buy_unit||null,supplier_name:g.source||null,purchase_date:todayISO()}}).catch(function(){});
+    audit('create','ingredient',rid,{via:'ai',name:g.name_th});
+    window.__aiIng=null;
+    aiPush('<div class="badge b-ok" style="margin:6px 0">✅ เพิ่มวัตถุดิบแล้ว — ดูได้ที่ อื่น ๆ → วัตถุดิบ และนำไปใส่สูตรสินค้าได้เลย</div>');
+    toast('เพิ่มวัตถุดิบสำเร็จ');
+  }).catch(function(){ btn.disabled=false; toast('บันทึกไม่สำเร็จ ลองอีกครั้ง'); });
 }
 
 boot();
