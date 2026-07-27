@@ -777,7 +777,8 @@ function ingDetail(id){
       + '<div class="stat"><div class="lbl">ต่ำสุด-สูงสุด</div><div class="val" style="font-size:15px">'+(minP!=null? fmtMoney0(minP)+'-'+fmtMoney0(maxP):'-')+'</div></div>'
       + '</div>'
       + '<div class="grid2" style="margin-top:10px"><button class="btn btn-s" onclick=\'ingForm('+JSON.stringify(r).replace(/'/g,"&#39;")+')\'>✏️ แก้ไข</button>'
-      + '<button class="btn btn-p" onclick="priceForm(\''+r.id+'\',\''+esc(r.buy_unit||'')+'\','+(r.conversion||1)+')">＋ บันทึกราคาซื้อใหม่</button></div></div>';
+      + '<button class="btn btn-p" onclick="priceForm(\''+r.id+'\',\''+esc(r.buy_unit||'')+'\','+(r.conversion||1)+')">＋ บันทึกราคาซื้อใหม่</button></div>'
+      + '<button class="btn btn-d btn-block" style="margin-top:8px" onclick="ingDelete(\''+r.id+'\')">🗑 ลบวัตถุดิบนี้ (กดลบ 2 ครั้งเพื่อยืนยัน)</button></div>';
     h+='<div class="card"><b>ประวัติราคา ('+prices.length+')</b>';
     if(!prices.length) h+='<div class="empty" style="padding:16px">ยังไม่มีประวัติราคา</div>';
     else h+='<table class="rep" style="margin-top:8px"><tr><th>วันที่</th><th>แหล่งซื้อ</th><th class="num">ราคา</th></tr>'
@@ -900,6 +901,7 @@ function prodDetail(id){
       + '<select id="ri_ing" style="flex:2">'+allIngs.map(function(i){ return '<option value="'+i.id+'">'+esc(i.name_th)+' (฿'+(Number(i.cost_per_use_unit)||0).toFixed(3)+'/'+esc(i.use_unit||'')+')</option>'; }).join('')+'</select>'
       + '<input type="number" inputmode="decimal" id="ri_qty" placeholder="ปริมาณ" style="flex:1">'
       + '<button class="btn btn-p" style="flex-shrink:0" onclick="addRecipeItem(\''+id+'\')">＋</button></div></div></div>';
+    h+='<div class="card"><button class="btn btn-d btn-block" onclick="prodDelete(\''+id+'\')">🗑 ลบสินค้านี้พร้อมสูตร (กดลบ 2 ครั้งเพื่อยืนยัน)</button></div>';
     V(h);
   });
 }
@@ -937,7 +939,9 @@ function supForm(d){
     + '<div><label>LINE</label><input id="sp_line" value="'+esc(d.line_id||'')+'"></div></div>'
     + '<label>เลขผู้เสียภาษี</label><input inputmode="numeric" id="sp_tax" value="'+esc(d.tax_id||'')+'">'
     + '<label>หมายเหตุ / เงื่อนไข</label><textarea id="sp_note" rows="2">'+esc(d.notes||'')+'</textarea>'
-    + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="saveSup(\''+(d.id||'')+'\')">💾 บันทึก</button></div>');
+    + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="saveSup(\''+(d.id||'')+'\')">💾 บันทึก</button>'
+    + (d.id? '<button class="btn btn-d btn-block" style="margin-top:8px" onclick="supDelete(\''+d.id+'\')">🗑 ลบ Supplier นี้ (กดลบ 2 ครั้งเพื่อยืนยัน)</button>':'')
+    + '</div>');
 }
 function saveSup(id){
   function gv(x){ return document.getElementById(x).value.trim(); }
@@ -1449,6 +1453,37 @@ function aiConfirmIng(btn){
     aiPush('<div class="badge b-ok" style="margin:6px 0">✅ เพิ่มวัตถุดิบแล้ว — ดูได้ที่ อื่น ๆ → วัตถุดิบ และนำไปใส่สูตรสินค้าได้เลย</div>');
     toast('เพิ่มวัตถุดิบสำเร็จ');
   }).catch(function(){ btn.disabled=false; toast('บันทึกไม่สำเร็จ ลองอีกครั้ง'); });
+}
+
+/* ================== DELETE ACTIONS ================== */
+function ingDelete(id){
+  if(window.__delOk!=='ing'+id){ window.__delOk='ing'+id; toast('กดลบอีกครั้งภายใน 3 วินาทีเพื่อยืนยัน'); setTimeout(function(){ if(window.__delOk==='ing'+id) window.__delOk=null; },3000); return; }
+  window.__delOk=null;
+  api('ingredients?id=eq.'+id,{method:'DELETE'}).then(function(){
+    audit('delete','ingredient',id,{}); toast('ลบวัตถุดิบแล้ว'); nav('#/ing');
+  }).catch(function(){
+    api('ingredients?id=eq.'+id,{method:'PATCH',body:{active:false,updated_at:new Date().toISOString()}}).then(function(){
+      audit('deactivate','ingredient',id,{}); toast('วัตถุดิบนี้ถูกใช้ในสูตรอยู่ — ปิดใช้งานแทน (หายจากรายการแล้ว)'); nav('#/ing');
+    }).catch(function(){ toast('ลบไม่สำเร็จ'); });
+  });
+}
+function prodDelete(id){
+  if(window.__delOk!=='prod'+id){ window.__delOk='prod'+id; toast('กดลบอีกครั้งภายใน 3 วินาทีเพื่อยืนยัน'); setTimeout(function(){ if(window.__delOk==='prod'+id) window.__delOk=null; },3000); return; }
+  window.__delOk=null;
+  api('products?id=eq.'+id,{method:'DELETE'}).then(function(){
+    audit('delete','product',id,{}); toast('ลบสินค้าและสูตรแล้ว'); nav('#/prod');
+  }).catch(function(){ toast('ลบไม่สำเร็จ'); });
+}
+function supDelete(id){
+  if(window.__delOk!=='sup'+id){ window.__delOk='sup'+id; toast('กดลบอีกครั้งภายใน 3 วินาทีเพื่อยืนยัน'); setTimeout(function(){ if(window.__delOk==='sup'+id) window.__delOk=null; },3000); return; }
+  window.__delOk=null;
+  api('suppliers?id=eq.'+id,{method:'DELETE'}).then(function(){
+    audit('delete','supplier',id,{}); closeSheet(); toast('ลบ Supplier แล้ว'); render();
+  }).catch(function(){
+    api('suppliers?id=eq.'+id,{method:'PATCH',body:{active:false,updated_at:new Date().toISOString()}}).then(function(){
+      audit('deactivate','supplier',id,{}); closeSheet(); toast('Supplier นี้ถูกอ้างอิงในข้อมูลอื่นอยู่ — ปิดใช้งานแทน (หายจากรายการแล้ว)'); render();
+    }).catch(function(){ toast('ลบไม่สำเร็จ'); });
+  });
 }
 
 boot();
