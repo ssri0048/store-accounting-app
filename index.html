@@ -256,7 +256,9 @@ routes.home = function(){
     api('transactions?select=txn_type,amount,txn_date,review_status,document_id&txn_date=gte.'+m+'&order=txn_date.desc&limit=1000'),
     api('transactions?select=id,txn_type,amount,txn_date,party_name,category_name,description,review_status&order=created_at.desc&limit=5'),
     count('documents','ocr_status=eq.failed&status=neq.linked'),
-    count('transactions','review_status=eq.pending')
+    count('transactions','review_status=eq.pending'),
+    api('ingredient_prices?select=ingredient_id,price,purchase_date&order=purchase_date.desc,created_at.desc&limit=60'),
+    api('ingredients?select=id,name_th,buy_unit&active=eq.true&limit=200')
   ]).then(function(res){
     var rows = res[0]||[], recent = res[1]||[];
     var ti=0,te=0,mi=0,me=0, noDoc=0;
@@ -285,6 +287,16 @@ routes.home = function(){
     if(res[2]>0) warn.push('<a class="menu-item" href="#/docs" style="border:none;padding:8px 0"><span class="mi">⚠️</span> เอกสาร OCR ไม่สำเร็จ <span class="badge b-err" style="margin-left:6px">'+res[2]+'</span><span class="arr">›</span></a>');
     if(noDoc>0) warn.push('<div class="menu-item" style="border:none;padding:8px 0"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span></div>');
     if(warn.length) h += '<div class="card"><b>งานที่ต้องทำต่อ</b>'+warn.join('')+'</div>';
+    var pMap={}; (res[5]||[]).forEach(function(i){ pMap[i.id]=i; });
+    var seenP={}, priceUps=[];
+    (res[4]||[]).forEach(function(p){ var arr=(seenP[p.ingredient_id]=seenP[p.ingredient_id]||[]); if(arr.length<2) arr.push(Number(p.price)); });
+    Object.keys(seenP).forEach(function(iid){
+      var a=seenP[iid], ing=pMap[iid];
+      if(ing && a.length===2 && a[1]>0 && a[0] > a[1]*1.1){
+        priceUps.push('<div class="item" onclick="nav(\'#/ing/'+iid+'\')"><div class="ic ic-ex">📈</div><div class="main"><div class="t1">'+esc(ing.name_th)+'</div><div class="t2">ราคาขึ้น ฿'+fmtMoney0(a[1])+' → ฿'+fmtMoney0(a[0])+' /'+esc(ing.buy_unit||'หน่วย')+' (+'+Math.round((a[0]/a[1]-1)*100)+'%)</div></div><div class="amt">›</div></div>');
+      }
+    });
+    if(priceUps.length) h += '<div class="card"><b>📈 วัตถุดิบราคาขึ้นเกิน 10%</b>'+priceUps.join('')+'</div>';
     h += '<div class="card"><div class="row"><b>รายการล่าสุด</b><span class="spacer"></span><a href="#/list" style="color:var(--green);font-size:13px;font-weight:700;text-decoration:none">ดูทั้งหมด ›</a></div>';
     if(!recent.length) h += '<div class="empty"><div class="em-ic">🧾</div>ยังไม่มีรายการ<br><br><button class="btn btn-p" onclick="location.hash=\'#/add\'">เพิ่มรายการแรก</button></div>';
     else h += recent.map(txnItem).join('');
@@ -1127,11 +1139,7 @@ function aiSend(){
   inp.value='';
   aiPush('<div style="text-align:right;margin:8px 0"><span style="background:#eaf4f0;padding:8px 12px;border-radius:12px;display:inline-block">'+esc(cmd)+'</span></div>');
   aiPush('<div class="help" id="aiWait">🤖 กำลังคิด...</div>');
-  var m = monthStartISO();
-  api('transactions?select=txn_type,amount,category_name&txn_date=gte.'+m+'&limit=1000').then(function(rows){
-    rows=rows||[]; var inc=0,exp=0,byCat={};
-    rows.forEach(function(r){ var i=(r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in'); var a=Number(r.amount)||0; if(i)inc+=a; else {exp+=a; var ck=r.category_name||'other'; byCat[ck]=(byCat[ck]||0)+a;} });
-    var summary='This month income total '+inc+' THB, expense total '+exp+' THB. Expense by category: '+JSON.stringify(byCat);
+  aiBuildContext().then(function(summary){
     return fetch(CFG.fnUrl+'/assistant',{method:'POST',headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key,'Content-Type':'application/json'},
       body:JSON.stringify({command:cmd,today:todayISO(),categories:S.cats.map(function(c){return c.name_th;}),summary:summary})});
   }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
@@ -1361,6 +1369,49 @@ function docDelete(id){
 }
 function togglePending(){ S.lastList.pending=!S.lastList.pending; routes.list(); }
 function goPending(){ S.lastList={q:'',type:'',from:'',to:'',pending:true}; if(location.hash==='#/list'){ routes.list(); } else { nav('#/list'); } }
+
+/* ================== AI RICH CONTEXT ================== */
+function aiBuildContext(){
+  var m = monthStartISO();
+  var d0 = new Date(); var pm = new Date(d0.getFullYear(), d0.getMonth()-1, 1);
+  var pmStart = pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0')+'-01';
+  return Promise.all([
+    api('transactions?select=txn_type,amount,category_name,txn_date,review_status,document_id&txn_date=gte.'+pmStart+'&limit=2000'),
+    api('products?select=*&active=eq.true&limit=100'),
+    api('recipe_items?select=*&limit=500'),
+    api('ingredients?select=id,name_th,buy_unit,use_unit,conversion,last_price,cost_per_use_unit,source&active=eq.true&limit=200'),
+    api('ingredient_prices?select=ingredient_id,price,purchase_date,supplier_name&order=purchase_date.desc&limit=100'),
+    count('documents','status=neq.linked')
+  ]).then(function(res){
+    var txns=res[0]||[], prods=res[1]||[], items=res[2]||[], ings=res[3]||[], prices=res[4]||[], inboxDocs=res[5];
+    var ingMap={}; ings.forEach(function(i){ ingMap[i.id]=i; });
+    var cur={inc:0,exp:0,byCat:{}}, prev={inc:0,exp:0,byCat:{}};
+    var pending=0, noDoc=0;
+    txns.forEach(function(r){
+      var g = r.txn_date>=m ? cur : prev;
+      var isIn=(r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in');
+      var a=Number(r.amount)||0;
+      if(isIn) g.inc+=a; else { g.exp+=a; var k=r.category_name||'other'; g.byCat[k]=(g.byCat[k]||0)+a; }
+      if(r.txn_date>=m){ if(r.review_status==='pending') pending++; if(!isIn && !r.document_id) noDoc++; }
+    });
+    var prodInfo = prods.map(function(p){
+      var c=calcCost(p, items, ingMap);
+      return { name:p.name, sell_price:p.sell_price, ingredient_cost:c.ing, total_cost:c.total,
+        profit_per_unit:+(((p.sell_price||0)-c.total).toFixed(2)),
+        recipe: items.filter(function(it){ return it.product_id===p.id; }).map(function(it){ var i=ingMap[it.ingredient_id]||{}; return (i.name_th||'?')+' '+it.qty+' '+(it.unit||i.use_unit||''); }) };
+    });
+    var priceHist={};
+    prices.forEach(function(p){ var i=ingMap[p.ingredient_id]; if(!i) return; var arr=(priceHist[i.name_th]=priceHist[i.name_th]||[]); if(arr.length<5) arr.push({price:Number(p.price), date:p.purchase_date, from:p.supplier_name||null}); });
+    return 'This month totals: income '+cur.inc+', expense '+cur.exp+', expense by category '+JSON.stringify(cur.byCat)
+      +'. Last month totals: income '+prev.inc+', expense '+prev.exp+', by category '+JSON.stringify(prev.byCat)
+      +'. Month-end pending tasks: '+pending+' transactions awaiting review, '+noDoc+' expenses without receipt this month, '+inboxDocs+' uploaded documents not yet linked to any transaction'
+      +'. Products with computed costs: '+JSON.stringify(prodInfo)
+      +'. Ingredients (per-use-unit cost): '+JSON.stringify(ings.map(function(i){ return {name:i.name_th, last_buy_price:i.last_price, buy_unit:i.buy_unit, cost_per_unit:i.cost_per_use_unit, unit:i.use_unit, usual_source:i.source||null}; }))
+      +'. Recent purchase price history (newest first): '+JSON.stringify(priceHist);
+  }).catch(function(){
+    return 'Business data unavailable right now.';
+  });
+}
 
 boot();
 render();
