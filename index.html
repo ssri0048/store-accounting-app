@@ -738,8 +738,10 @@ function ingForm(existing){
     + '<label>1 หน่วยซื้อ = กี่หน่วยใช้? <span class="req">*</span></label><input type="number" inputmode="decimal" id="ig_conv" placeholder="เช่น 1 กก. = 1000 กรัม → ใส่ 1000" value="'+(d.conversion||'')+'">'
     + '<div class="help">ระบบจะคำนวณต้นทุนต่อหน่วยใช้ให้อัตโนมัติ เช่น แป้ง 55 บาท/กก. = 0.055 บาท/กรัม</div>'
     + '<div class="grid2"><div><label>ราคาซื้อล่าสุด (บาท)</label><input type="number" inputmode="decimal" id="ig_price" value="'+(d.last_price||'')+'"></div>'
-    + '<div><label>แหล่งซื้อ</label><input id="ig_src" placeholder="แม็คโคร / ตลาด" value="'+esc(d.source||'')+'"></div></div>'
+    + '<div><label>แหล่งซื้อ</label><input id="ig_src" list="supList" placeholder="เลือกหรือพิมพ์ใหม่" value="'+esc(d.source||'')+'"></div></div>'
+    + '<datalist id="supList"></datalist>'
     + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="saveIng(\''+(d.id||'')+'\')">💾 บันทึกวัตถุดิบ</button></div>');
+  fillSupList();
 }
 function saveIng(id){
   function gv(x){ return document.getElementById(x).value.trim(); }
@@ -793,9 +795,10 @@ function ingDetail(id){
 function priceForm(id, unit, conv){
   sheet('<h3>บันทึกราคาซื้อใหม่</h3>'
     + '<label>ราคา (บาท / '+esc(unit||'หน่วย')+') <span class="req">*</span></label><input type="number" inputmode="decimal" id="pf_price">'
-    + '<label>ซื้อจาก</label><input id="pf_sup" placeholder="แม็คโคร / ตลาด / ร้านค้าส่ง">'
+    + '<label>ซื้อจาก</label><input id="pf_sup" list="supList" placeholder="เลือกหรือพิมพ์ใหม่"><datalist id="supList"></datalist>'
     + '<label>วันที่ซื้อ</label><input type="date" id="pf_date" value="'+todayISO()+'">'
     + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="savePrice(\''+id+'\','+conv+')">💾 บันทึกราคา</button></div>');
+  fillSupList();
 }
 function savePrice(id, conv){
   var p=parseFloat(document.getElementById('pf_price').value); if(!p){ toast('กรอกราคา'); return; }
@@ -1507,6 +1510,15 @@ function ensureSupplier(name){
       return sid;
     });
   }).catch(function(){ return null; });
+}
+
+function fillSupList(){
+  var put=function(names){ var dl=document.getElementById('supList'); if(dl) dl.innerHTML=(names||[]).map(function(n){ return '<option value="'+esc(n)+'"></option>'; }).join(''); };
+  if(S.supNames) put(S.supNames);
+  api('suppliers?select=name&active=eq.true&order=name&limit=200').then(function(r){
+    S.supNames=(r||[]).map(function(x){ return x.name; });
+    put(S.supNames);
+  }).catch(function(){});
 }
 
 boot();
