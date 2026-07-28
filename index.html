@@ -738,10 +738,9 @@ function ingForm(existing){
     + '<label>1 หน่วยซื้อ = กี่หน่วยใช้? <span class="req">*</span></label><input type="number" inputmode="decimal" id="ig_conv" placeholder="เช่น 1 กก. = 1000 กรัม → ใส่ 1000" value="'+(d.conversion||'')+'">'
     + '<div class="help">ระบบจะคำนวณต้นทุนต่อหน่วยใช้ให้อัตโนมัติ เช่น แป้ง 55 บาท/กก. = 0.055 บาท/กรัม</div>'
     + '<div class="grid2"><div><label>ราคาซื้อล่าสุด (บาท)</label><input type="number" inputmode="decimal" id="ig_price" value="'+(d.last_price||'')+'"></div>'
-    + '<div><label>แหล่งซื้อ</label><input id="ig_src" list="supList" placeholder="เลือกหรือพิมพ์ใหม่" value="'+esc(d.source||'')+'"></div></div>'
-    + '<datalist id="supList"></datalist>'
+    + '<div><label>แหล่งซื้อ</label><input id="ig_src" placeholder="เลือกหรือพิมพ์ใหม่" autocomplete="off" value="'+esc(d.source||'')+'"></div></div>'
     + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="saveIng(\''+(d.id||'')+'\')">💾 บันทึกวัตถุดิบ</button></div>');
-  fillSupList();
+  attachSupSuggest('ig_src');
 }
 function saveIng(id){
   function gv(x){ return document.getElementById(x).value.trim(); }
@@ -795,10 +794,10 @@ function ingDetail(id){
 function priceForm(id, unit, conv){
   sheet('<h3>บันทึกราคาซื้อใหม่</h3>'
     + '<label>ราคา (บาท / '+esc(unit||'หน่วย')+') <span class="req">*</span></label><input type="number" inputmode="decimal" id="pf_price">'
-    + '<label>ซื้อจาก</label><input id="pf_sup" list="supList" placeholder="เลือกหรือพิมพ์ใหม่"><datalist id="supList"></datalist>'
+    + '<label>ซื้อจาก</label><input id="pf_sup" placeholder="เลือกหรือพิมพ์ใหม่" autocomplete="off">'
     + '<label>วันที่ซื้อ</label><input type="date" id="pf_date" value="'+todayISO()+'">'
     + '<div style="margin-top:14px"><button class="btn btn-p btn-block" onclick="savePrice(\''+id+'\','+conv+')">💾 บันทึกราคา</button></div>');
-  fillSupList();
+  attachSupSuggest('pf_sup');
 }
 function savePrice(id, conv){
   var p=parseFloat(document.getElementById('pf_price').value); if(!p){ toast('กรอกราคา'); return; }
@@ -1518,6 +1517,29 @@ function fillSupList(){
   api('suppliers?select=name&active=eq.true&order=name&limit=200').then(function(r){
     S.supNames=(r||[]).map(function(x){ return x.name; });
     put(S.supNames);
+  }).catch(function(){});
+}
+
+function attachSupSuggest(inputId){
+  var inp=document.getElementById(inputId); if(!inp) return;
+  var box=document.createElement('div');
+  box.style.cssText='display:none;background:#fff;border:1.5px solid var(--green);border-radius:10px;margin-top:4px;max-height:170px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.08)';
+  inp.parentNode.insertBefore(box, inp.nextSibling);
+  function pick(el){ inp.value=el.textContent; box.style.display='none'; }
+  window.__supPick=pick;
+  function show(){
+    var q=inp.value.trim().toLowerCase();
+    var names=S.supNames||[];
+    var hits=names.filter(function(n){ return q==='' ? true : String(n).toLowerCase().indexOf(q)>=0; }).slice(0,6);
+    if(!hits.length || (hits.length===1 && hits[0]===inp.value)){ box.style.display='none'; return; }
+    box.innerHTML=hits.map(function(n){ return '<div style="padding:11px 14px;border-bottom:1px solid var(--line);font-size:15px" onclick="window.__supPick(this)">'+esc(n)+'</div>'; }).join('');
+    box.style.display='block';
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  if(S.supNames){ /* cached */ }
+  api('suppliers?select=name&active=eq.true&order=name&limit=200').then(function(r){
+    S.supNames=(r||[]).map(function(x){ return x.name; });
   }).catch(function(){});
 }
 
