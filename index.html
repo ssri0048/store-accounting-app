@@ -375,6 +375,7 @@ function openTxn(id){
       + trRow('บันทึกโดย', (r.created_by||'-')+' ('+(r.source||'manual')+')')
       + '</table>';
     if(r.document_id) h += '<button class="btn btn-s btn-block" style="margin-top:12px" onclick="openDocFile(\''+r.document_id+'\')">📄 เปิดเอกสารแนบ</button>';
+    else if(!isIn) h += '<button class="btn btn-t btn-block" style="margin-top:12px" onclick="certSheet(\''+r.id+'\')">🧾 ไม่มีบิล? สร้างใบรับรองแทนใบเสร็จ</button>';
     h += '<div class="grid2" style="margin-top:10px">'
       + '<button class="btn btn-s" onclick="editTxn(\''+r.id+'\')">✏️ แก้ไข</button>'
       + (r.review_status==='pending'? '<button class="btn btn-p" onclick="markReviewed(\''+r.id+'\')">✓ ตรวจแล้ว</button>' : '<button class="btn btn-t" onclick="closeSheet()">ปิด</button>')
@@ -1917,6 +1918,116 @@ function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
     +'<scr'+'ipt>window.print()</scr'+'ipt></body></html>';
   if(w && w.document){ w.document.write(html); w.document.close(); }
   else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='cash-report_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
+}
+
+/* ================== CERT: ใบรับรองแทนใบเสร็จรับเงิน ================== */
+function thaiNum(num){
+  var t=['','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+  var p=['','สิบ','ร้อย','พัน','หมื่น','แสน'];
+  if(num===0) return '';
+  if(num>=1000000) return thaiNum(Math.floor(num/1000000))+'ล้าน'+thaiNum(num%1000000);
+  var s='',str=String(num),len=str.length;
+  for(var i=0;i<len;i++){
+    var d=Number(str.charAt(i)); if(!d) continue;
+    var pos=len-i-1;
+    if(pos===1&&d===1) s+='สิบ';
+    else if(pos===1&&d===2) s+='ยี่สิบ';
+    else if(pos===0&&d===1&&len>1) s+='เอ็ด';
+    else s+=t[d]+p[pos];
+  }
+  return s;
+}
+function thaiBaht(n){
+  n=Math.round(Number(n)*100)/100;
+  var b=Math.floor(n), st=Math.round((n-b)*100);
+  var s=(b===0?'ศูนย์':thaiNum(b))+'บาท';
+  s+= st? thaiNum(st)+'สตางค์' : 'ถ้วน';
+  return s;
+}
+function cvWrap(c,text,x,y,maxW,lh){
+  var s=String(text||''), lineTxt='';
+  for(var i=0;i<s.length;i++){
+    var test=lineTxt+s.charAt(i);
+    if(c.measureText(test).width>maxW && lineTxt){ c.fillText(lineTxt,x,y); y+=lh; lineTxt=s.charAt(i); }
+    else lineTxt=test;
+  }
+  if(lineTxt) c.fillText(lineTxt,x,y);
+  return y;
+}
+function certSheet(txnId){
+  Promise.all([
+    api('transactions?select=*&id=eq.'+txnId),
+    api('settings?select=value&key=eq.taxinfo')
+  ]).then(function(res){
+    var r=res[0]&&res[0][0]; if(!r){ toast('ไม่พบรายการ'); return; }
+    var t=(res[1]&&res[1][0]&&res[1][0].value)||{};
+    window.__certTxn=r;
+    sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>🧾 ใบรับรองแทนใบเสร็จรับเงิน</h3>'
+      +'<div class="help">ใช้เมื่อผู้ขายออกใบเสร็จให้ไม่ได้ (เช่น ซื้อของตลาดสด) — ระบบจะสร้างเป็นรูปเอกสาร แนบเข้ารายการนี้ และซิงก์เข้า Google Drive ให้อัตโนมัติ · ทำหรือไม่ทำก็ได้</div>'
+      +'<table class="rep" style="margin:8px 0">'+trRow('วันที่จ่าย', fmtDate(r.txn_date))+trRow('จำนวนเงิน','฿'+fmtMoney(r.amount))+'</table>'
+      +'<label>รายละเอียดที่ซื้อ/จ่าย <span class="req">*</span></label><input id="ct_desc" value="'+esc(r.description||r.category_name||'')+'" placeholder="เช่น ผักสด ไข่ไก่ 5 แผง">'
+      +'<label>จ่ายให้ / ซื้อจาก</label><input id="ct_seller" value="'+esc(r.party_name||'')+'" placeholder="เช่น แม่ค้าตลาดสด (ไม่ทราบชื่อ)">'
+      +'<label>เหตุผลที่ไม่มีใบเสร็จ</label><input id="ct_reason" value="ผู้รับเงินไม่สามารถออกใบเสร็จรับเงินได้">'
+      +'<label>ผู้จ่ายเงิน/ผู้รับรอง</label><input id="ct_payer" value="'+esc(t.owner||S.user||'')+'">'
+      +'<label>ชื่อกิจการ</label><input id="ct_shop" value="'+esc(t.shop||S.store.name||'')+'">'
+      +'<div class="grid2" style="margin-top:12px"><button class="btn btn-t" onclick="closeSheet()">ไม่ทำตอนนี้</button>'
+      +'<button class="btn btn-p" onclick="certGen(this)">✓ สร้างและแนบ</button></div>');
+  }).catch(function(){ toast('โหลดข้อมูลไม่สำเร็จ'); });
+}
+function certGen(btn){
+  var r=window.__certTxn; if(!r){ toast('ไม่พบรายการ'); return; }
+  var desc=document.getElementById('ct_desc').value.trim(); if(!desc){ toast('กรอกรายละเอียดที่ซื้อก่อน'); return; }
+  var seller=document.getElementById('ct_seller').value.trim();
+  var reason=document.getElementById('ct_reason').value.trim()||'ผู้รับเงินไม่สามารถออกใบเสร็จรับเงินได้';
+  var payer=document.getElementById('ct_payer').value.trim()||S.user||'-';
+  var shop=document.getElementById('ct_shop').value.trim()||'-';
+  btn.disabled=true; btn.textContent='กำลังสร้าง...';
+  var amt=Number(r.amount)||0;
+  var cv=document.createElement('canvas'); cv.width=1000; cv.height=1414;
+  var c=cv.getContext('2d');
+  c.fillStyle='#fff'; c.fillRect(0,0,1000,1414);
+  c.strokeStyle='#333'; c.lineWidth=2; c.strokeRect(40,40,920,1334);
+  c.fillStyle='#111'; c.textAlign='center';
+  c.font='bold 44px sans-serif'; c.fillText('ใบรับรองแทนใบเสร็จรับเงิน',500,140);
+  c.font='30px sans-serif'; c.fillText(shop,500,200);
+  c.textAlign='left';
+  var y=290;
+  function ln(k,v){ c.font='bold 28px sans-serif'; c.fillText(k,100,y); c.font='28px sans-serif'; y=cvWrap(c,v,340,y,560,44); y+=54; }
+  ln('วันที่จ่ายเงิน', fmtDate(r.txn_date));
+  ln('รายการ', desc);
+  ln('จ่ายให้/ซื้อจาก', seller||'ไม่ทราบชื่อผู้ขาย');
+  ln('หมวดหมู่', r.category_name||'-');
+  ln('จำนวนเงิน', fmtMoney(amt)+' บาท ('+thaiBaht(amt)+')');
+  ln('วิธีชำระ', payName(r.payment_method)||'-');
+  ln('เหตุผล', reason);
+  y+=30; c.font='28px sans-serif';
+  y=cvWrap(c,'ข้าพเจ้าขอรับรองว่า รายจ่ายข้างต้นเป็นรายจ่ายที่เกี่ยวข้องกับกิจการจริง และไม่สามารถเรียกใบเสร็จรับเงินจากผู้รับเงินได้',100,y,800,44);
+  y+=120;
+  c.fillText('ลงชื่อ ..............................................  ผู้จ่ายเงิน/ผู้รับรอง',100,y); y+=54;
+  c.fillText('( '+payer+' )',190,y); y+=54;
+  c.fillText('วันที่จัดทำ '+fmtDate(todayISO()),100,y);
+  c.font='22px sans-serif'; c.fillStyle='#666';
+  c.fillText('จัดทำตามแนวทางคู่มือเอกสารประกอบการลงบัญชีของกรมสรรพากร · สร้างโดยระบบบัญชีร้าน',100,1330);
+  var b64=cv.toDataURL('image/jpeg',0.92).split(',')[1];
+  var d=new Date();
+  var path=d.getFullYear()+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+uuid()+'.jpg';
+  var bytes=Uint8Array.from(atob(b64),function(ch){return ch.charCodeAt(0);});
+  fetch(CFG.url+'/storage/v1/object/receipts/'+path,{method:'POST',headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key,'Content-Type':'image/jpeg'},body:bytes})
+  .then(function(rs){ if(!rs.ok) throw new Error('อัปโหลดไม่สำเร็จ ('+rs.status+')');
+    return api('documents',{method:'POST',prefer:'return=representation',body:{
+      storage_path:path, file_name:'ใบรับรองแทนใบเสร็จ_'+r.txn_date+'.jpg', mime_type:'image/jpeg',
+      file_size:bytes.length, doc_type:'other', ocr_status:'done', status:'linked', created_by:S.user||'unknown'
+    }});
+  }).then(function(rows){
+    var did=rows&&rows[0]&&rows[0].id; if(!did) throw new Error('บันทึกเอกสารไม่สำเร็จ');
+    return api('transactions?id=eq.'+r.id,{method:'PATCH',body:{document_id:did, updated_at:new Date().toISOString()}}).then(function(){ return did; });
+  }).then(function(did){
+    audit('create','document',did,{via:'cert-no-bill',txn:r.id});
+    fetch(CFG.fnUrl+'/drivesync',{headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key}}).catch(function(){});
+    var tid=r.id; window.__certTxn=null; closeSheet();
+    toast('สร้างใบรับรองและแนบเข้ารายการแล้ว ✓ กำลังซิงก์เข้า Google Drive');
+    openTxn(tid);
+  }).catch(function(e){ btn.disabled=false; btn.textContent='✓ สร้างและแนบ'; toast('ไม่สำเร็จ: '+(e&&e.message||'ลองอีกครั้ง')); });
 }
 
 boot();
