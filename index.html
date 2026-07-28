@@ -1004,6 +1004,7 @@ function loadReport(){
       + '<button class="btn btn-s" onclick="expXlsx()">📗 Excel</button>'
       + '<button class="btn btn-s" onclick="expCsv()">📄 CSV</button>'
       + '<button class="btn btn-s" onclick="window.print()">🖨 PDF</button></div>'
+      + '<button class="btn btn-p btn-block" style="margin-top:8px" onclick="rdSheet()">🧾 รายงานเงินสดรับ-จ่าย (แบบยื่นสรรพากร)</button>'
       + '<div class="help" style="margin-top:8px">PDF: กด "🖨 PDF" แล้วเลือก "บันทึกเป็น PDF" ในหน้าจอพิมพ์ของมือถือ · แนะนำอัปโหลดไฟล์ที่ได้ไปเก็บในโฟลเดอร์ 09_Exports บน Google Drive</div></div>';
     document.getElementById('rpBody').innerHTML=h;
   }).catch(function(){ document.getElementById('rpBody').innerHTML='<div class="card"><div class="empty">โหลดไม่สำเร็จ<br><button class="btn btn-s" style="margin-top:8px" onclick="loadReport()">ลองอีกครั้ง</button></div></div>'; });
@@ -1816,6 +1817,106 @@ function htPick(id){
   d.cfg={ product_id:id, salary:c.salary!=null?c.salary:15000, fixed:c.fixed!=null?c.fixed:2000, profit:c.profit||0, fc:c.fc!=null?c.fc:35 };
   htRender();
   api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'target',value:d.cfg,updated_at:new Date().toISOString()}}).catch(function(){});
+}
+
+/* ================== RD CASH REPORT (แบบสรรพากร ฉบับที่ 161) ================== */
+var RD_PURCHASE_CATS={'วัตถุดิบ':1,'บรรจุภัณฑ์':1,'ซื้อสินค้ามาขาย':1};
+function rdSheet(){
+  api('settings?select=value&key=eq.taxinfo').then(function(rows){
+    var t=(rows&&rows[0]&&rows[0].value)||{};
+    var m=todayISO().slice(0,7);
+    sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>🧾 รายงานเงินสดรับ-จ่าย (แบบสรรพากร)</h3>'
+      +'<div class="help">ตามประกาศอธิบดีกรมสรรพากรฯ (ฉบับที่ 161) สำหรับบุคคลธรรมดาที่ไม่ได้จด VAT — จัดทำเป็นรายเดือน ระบบสรุปยอดขายเป็นรายวันให้อัตโนมัติ</div>'
+      +'<label>ชื่อผู้ประกอบการ (ตามบัตรประชาชน)</label><input id="rd_owner" value="'+esc(t.owner||'')+'" placeholder="เช่น นางสาวศศิ ใจดี">'
+      +'<label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน 13 หลัก</label><input id="rd_taxid" inputmode="numeric" value="'+esc(t.tax_id||'')+'">'
+      +'<label>ชื่อสถานประกอบการ</label><input id="rd_shop" value="'+esc(t.shop||S.store.name||'')+'">'
+      +'<label>เดือนที่ต้องการ</label><input type="month" id="rd_month" value="'+m+'">'
+      +'<div class="grid2" style="margin-top:12px"><button class="btn btn-s" onclick="rdGen(\'xlsx\')">📗 Excel</button>'
+      +'<button class="btn btn-p" onclick="rdGen(\'print\')">🖨 พิมพ์ / PDF</button></div>');
+  }).catch(function(){ toast('โหลดการตั้งค่าไม่สำเร็จ'); });
+}
+function rdGen(mode){
+  var t={ owner:document.getElementById('rd_owner').value.trim(),
+    tax_id:document.getElementById('rd_taxid').value.trim(),
+    shop:document.getElementById('rd_shop').value.trim() };
+  var m=document.getElementById('rd_month').value; if(!m){ toast('เลือกเดือนก่อน'); return; }
+  api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'taxinfo',value:t,updated_at:new Date().toISOString()}}).catch(function(){});
+  var w=null; if(mode==='print'){ w=window.open('','_blank'); }
+  var from=m+'-01';
+  var y=Number(m.slice(0,4)), mo=Number(m.slice(5,7));
+  var last=new Date(y, mo, 0).getDate();
+  var to=m+'-'+('0'+last).slice(-2);
+  api('transactions?select=*&txn_date=gte.'+from+'&txn_date=lte.'+to+'&order=txn_date&limit=3000').then(function(rows){
+    rows=rows||[];
+    var incMap={}, lines=[], personal=0, skipped=0;
+    rows.forEach(function(r){
+      var a=Number(r.amount)||0; if(!a) return;
+      var tp=r.txn_type;
+      if(tp==='transfer_in'||tp==='transfer_out'||tp==='adjust'){ skipped++; return; }
+      if(tp==='income'||tp==='sale'){
+        var k=r.txn_date+'|'+(r.category_name||'ขายสินค้า');
+        var e=incMap[k]||(incMap[k]={date:r.txn_date, cat:(r.category_name||'ขายสินค้า'), total:0, pay:{}});
+        e.total+=a; var p=payName(r.payment_method)||'ไม่ระบุ'; e.pay[p]=(e.pay[p]||0)+a;
+        return;
+      }
+      if((r.category_name||'')==='รายจ่ายส่วนตัว'){ personal+=a; return; }
+      var isPur = tp==='purchase' || RD_PURCHASE_CATS[r.category_name||''];
+      var name = (tp==='refund'?'คืนเงินลูกค้า — ':'')+(r.category_name||'ค่าใช้จ่าย')+(r.party_name?' — '+r.party_name:'');
+      lines.push({date:r.txn_date, name:name, inc:0, pur:(isPur&&tp!=='refund')?a:0, oth:(!isPur||tp==='refund')?a:0,
+        note:(payName(r.payment_method)||'')+(r.document_id?' · มีหลักฐาน':' · ไม่มีบิล')});
+    });
+    Object.keys(incMap).forEach(function(k){
+      var e=incMap[k];
+      var pn=Object.keys(e.pay).map(function(p){ return p+' '+fmtMoney0(e.pay[p]); }).join(', ');
+      lines.push({date:e.date, name:'ขายสินค้า — '+e.cat+' (สรุปยอดขายทั้งวัน)', inc:e.total, pur:0, oth:0, note:pn});
+    });
+    lines.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:(b.inc-a.inc)); });
+    var ti=0,tp2=0,to2=0;
+    lines.forEach(function(l){ ti+=l.inc; tp2+=l.pur; to2+=l.oth; });
+    if(mode==='xlsx'){ rdXlsx(t,m,lines,ti,tp2,to2,personal,skipped); }
+    else { rdPrint(w,t,m,lines,ti,tp2,to2,personal,skipped); }
+    audit('export','report',null,{type:'rd-cash-report',month:m});
+  }).catch(function(e){ if(w) w.close(); toast('สร้างรายงานไม่สำเร็จ ลองอีกครั้ง'); });
+}
+function rdMonthTh(m){
+  var TH=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var y=Number(m.slice(0,4)); var yy=(S.prefs.year_format==='ce')? y : y+543;
+  return TH[Number(m.slice(5,7))-1]+' '+yy;
+}
+function rdXlsx(t,m,lines,ti,tp,to,personal,skipped){
+  try{
+    var aoa=[ ['รายงานเงินสดรับ-จ่าย'], ['ชื่อผู้ประกอบการ', t.owner||'-'], ['เลขประจำตัวผู้เสียภาษี', t.tax_id||'-'], ['ชื่อสถานประกอบการ', t.shop||'-'], ['เดือน', rdMonthTh(m)], [],
+      ['วัน เดือน ปี','รายการ','รายรับ','รายจ่าย: ซื้อสินค้า','รายจ่าย: ค่าใช้จ่ายอื่น ๆ','หมายเหตุ'] ];
+    lines.forEach(function(l){ aoa.push([fmtDate(l.date), l.name, l.inc||'', l.pur||'', l.oth||'', l.note||'']); });
+    aoa.push(['','รวมทั้งเดือน', ti, tp, to, '']);
+    aoa.push(['','รายรับสุทธิหักรายจ่าย (เบื้องต้น)', ti-tp-to, '', '', '']);
+    aoa.push([]);
+    if(personal>0) aoa.push(['หมายเหตุ','เงินถอนใช้ส่วนตัว (ไม่ใช่รายจ่ายกิจการ ไม่รวมในยอดข้างต้น): '+fmtMoney(personal)+' บาท']);
+    if(skipped>0) aoa.push(['หมายเหตุ','รายการเงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการ ไม่ถูกนับ (ไม่ใช่รายได้/รายจ่ายกิจการ)']);
+    aoa.push(['หมายเหตุ','เก็บใบเสร็จ/สลิปโอน/หลักฐานประกอบทุกรายการไว้อย่างน้อย 5 ปี']);
+    aoa.push(['หมายเหตุ','ยอดรวมรายเดือนใช้ประกอบการยื่น ภ.ง.ด.94 (ยื่น ก.ค.-ก.ย. สำหรับเงินได้ ม.ค.-มิ.ย.) และ ภ.ง.ด.90 (ยื่น ม.ค.-มี.ค. ปีถัดไป)']);
+    var wb=XLSX.utils.book_new(); var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:14},{wch:46},{wch:12},{wch:15},{wch:17},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, ws, 'เงินสดรับ-จ่าย');
+    XLSX.writeFile(wb, 'cash-report_'+m+'.xlsx');
+    toast('ดาวน์โหลด Excel แล้ว');
+  }catch(e){ toast('Export ไม่สำเร็จ: '+e.message); }
+}
+function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
+  var rowsH=lines.map(function(l){ return '<tr><td>'+esc(fmtDate(l.date))+'</td><td>'+esc(l.name)+'</td><td class="n">'+(l.inc?fmtMoney(l.inc):'')+'</td><td class="n">'+(l.pur?fmtMoney(l.pur):'')+'</td><td class="n">'+(l.oth?fmtMoney(l.oth):'')+'</td><td>'+esc(l.note||'')+'</td></tr>'; }).join('');
+  var html='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>รายงานเงินสดรับ-จ่าย '+esc(m)+'</title><style>body{font-family:-apple-system,sans-serif;font-size:13px;margin:24px}h2{text-align:center;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #333;padding:4px 6px;vertical-align:top}th{background:#f0f0f0}.n{text-align:right;white-space:nowrap}.hd{margin:2px 0}.tot td{font-weight:bold;background:#f5f5dc}</style></head><body>'
+    +'<h2>รายงานเงินสดรับ-จ่าย</h2>'
+    +'<div class="hd">ชื่อผู้ประกอบการ: '+esc(t.owner||'-')+' &nbsp;&nbsp; เลขประจำตัวผู้เสียภาษี: '+esc(t.tax_id||'-')+'</div>'
+    +'<div class="hd">ชื่อสถานประกอบการ: '+esc(t.shop||'-')+' &nbsp;&nbsp; เดือน: '+esc(rdMonthTh(m))+'</div>'
+    +'<table><tr><th style="width:88px">วัน เดือน ปี</th><th>รายการ</th><th style="width:78px">รายรับ</th><th style="width:88px">รายจ่าย:<br>ซื้อสินค้า</th><th style="width:95px">รายจ่าย:<br>ค่าใช้จ่ายอื่น ๆ</th><th style="width:140px">หมายเหตุ</th></tr>'
+    +rowsH
+    +'<tr class="tot"><td></td><td>รวมทั้งเดือน</td><td class="n">'+fmtMoney(ti)+'</td><td class="n">'+fmtMoney(tp)+'</td><td class="n">'+fmtMoney(to)+'</td><td></td></tr>'
+    +'</table>'
+    +'<p>รายรับสุทธิหักรายจ่าย (เบื้องต้น): <b>'+fmtMoney(ti-tp-to)+' บาท</b>'+(personal>0?' · เงินถอนใช้ส่วนตัว (ไม่รวมข้างต้น): '+fmtMoney(personal)+' บาท':'')+'</p>'
+    +'<p style="font-size:11px;color:#555">จัดทำตามประกาศอธิบดีกรมสรรพากรเกี่ยวกับภาษีเงินได้ (ฉบับที่ 161) · เก็บหลักฐานประกอบทุกรายการอย่างน้อย 5 ปี · ใช้ประกอบการยื่น ภ.ง.ด.94 / ภ.ง.ด.90'+(skipped>0?' · เงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการไม่ถูกนับ':'')+'</p>'
+    +'<scr'+'ipt>window.print()</scr'+'ipt></body></html>';
+  if(w && w.document){ w.document.write(html); w.document.close(); }
+  else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='cash-report_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
 }
 
 boot();
