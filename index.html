@@ -1166,7 +1166,7 @@ function saveSettings(){
 /* ================== AI ASSISTANT ================== */
 routes.ai = function(){
   setTop('ผู้ช่วย AI', true);
-  V('<div class="card"><b>🤖 ผู้ช่วย AI</b><div class="help" style="margin:6px 0">พิมพ์สั่งงานได้ เช่น "บันทึกรายจ่ายค่านม 450 บาท ซื้อจากแม็คโครวันนี้" หรือถาม "สรุปรายจ่ายเดือนนี้" — ระบบแสดง Preview ให้ยืนยันก่อนบันทึกเสมอ</div>'
+  V('<div class="card"><b>🤖 ผู้ช่วย AI</b><div class="help" style="margin:6px 0">พิมพ์สั่งงานได้ เช่น "บันทึกรายจ่ายค่านม 450 บาท ซื้อจากแม็คโครวันนี้" , เพิ่มวัตถุดิบ "เพิ่มวัตถุดิบ น้ำผึ้ง ขวดละ 90 บาท ได้ 230 กรัม", บันทึกสูตร "บันทึกสูตรเบเกิล ได้ 6 ชิ้น ใช้แป้ง 300 กรัม น้ำผึ้ง 27 กรัม ..." หรือถาม "สรุปรายจ่ายเดือนนี้" — ระบบแสดง Preview ให้ยืนยันก่อนบันทึกเสมอ</div>'
     + '<div id="aiLog"></div>'
     + '<div class="row" style="margin-top:10px"><input id="aiCmd" placeholder="พิมพ์คำสั่ง..."><button class="btn btn-p" style="flex-shrink:0" onclick="aiSend()">ส่ง</button></div></div>');
   var inp=document.getElementById('aiCmd');
@@ -1210,6 +1210,24 @@ function aiSend(){
         +(g.pack_price==null? '<div class="help" style="color:#96700f;margin-top:4px">⚠️ ยังไม่มีราคา — บันทึกได้ แล้วค่อยเติมราคาทีหลังในหน้าวัตถุดิบ</div>':'')
         +'<div class="grid2" style="margin-top:8px"><button class="btn btn-t" onclick="aiCancel()">ยกเลิก</button>'
         +'<button class="btn btn-p" onclick="aiConfirmIng(this)">✓ บันทึกวัตถุดิบ</button></div></div>');
+    } else if(d.action==='add_recipe' && d.recipe){
+      var rc=d.recipe; window.__aiRecipe=rc;
+      var ry=Number(rc.yield_units)||1; var rtot=0; var rmiss=0; var rrows='';
+      (rc.ingredients||[]).forEach(function(it){
+        var cpu=(it.pack_price!=null&&Number(it.units_per_pack))? Number(it.pack_price)/Number(it.units_per_pack) : null;
+        var per=+(Number(it.qty_used||0)/ry).toFixed(2);
+        if(cpu!=null){ rtot+=cpu*Number(it.qty_used||0); } else { rmiss++; }
+        rrows+='<tr><td>'+esc(it.name_th||'')+'</td><td style="text-align:right">'+per+' '+esc(it.use_unit||'')+'/ชิ้น</td><td style="text-align:right">'+(cpu!=null? '฿'+(cpu*per).toFixed(2):'—')+'</td></tr>';
+      });
+      aiPush('<div class="card" style="background:#f2f8f5"><b>บันทึกสูตรนี้?</b>'
+        +'<table class="rep" style="margin-top:6px">'
+        +trRow('สินค้า', rc.product_name)
+        +trRow('สูตรเต็มได้', ry+' ชิ้น')
+        +trRow('ราคาขาย', rc.sell_price!=null? '฿'+fmtMoney(rc.sell_price):null)
+        +'</table><table class="rep" style="margin-top:6px"><tr><th style="text-align:left">วัตถุดิบ</th><th style="text-align:right">ต่อชิ้น</th><th style="text-align:right">ต้นทุน</th></tr>'+rrows+'</table>'
+        +'<div class="help" style="margin-top:4px">ต้นทุนวัตถุดิบ ≈ ฿'+(rtot/ry).toFixed(2)+'/ชิ้น (฿'+rtot.toFixed(2)+'/สูตรเต็ม)'+(rmiss? ' · '+rmiss+' รายการยังไม่มีราคา — บันทึกได้ แล้วค่อยเติมราคาทีหลัง':'')+'</div>'
+        +'<div class="grid2" style="margin-top:8px"><button class="btn btn-t" onclick="aiCancel()">ยกเลิก</button>'
+        +'<button class="btn btn-p" onclick="aiConfirmRecipe(this)">✓ บันทึกสูตร</button></div></div>');
     } else if(d.answer){
       aiPush('<div style="margin:8px 0"><span style="background:#fff;border:1px solid var(--line);padding:8px 12px;border-radius:12px;display:inline-block">🤖 '+esc(d.answer)+'</span></div>');
     } else {
@@ -1220,7 +1238,7 @@ function aiSend(){
     aiPush('<div class="badge b-err" style="margin:6px 0">'+esc(e.message.slice(0,150))+'</div>');
   });
 }
-function aiCancel(){ window.__aiTxn=null; aiPush('<div class="help">ยกเลิกแล้ว ไม่มีการบันทึก</div>'); }
+function aiCancel(){ window.__aiTxn=null; window.__aiIng=null; window.__aiRecipe=null; aiPush('<div class="help">ยกเลิกแล้ว ไม่มีการบันทึก</div>'); }
 function aiConfirm(btn){
   var t=window.__aiTxn; if(!t){ toast('ไม่มีรายการรอยืนยัน'); return; }
   btn.disabled=true;
@@ -1584,6 +1602,56 @@ function loadVendorNames(){
     S.supNames=Object.keys(set).sort();
     return S.supNames;
   }).catch(function(){ return S.supNames||[]; });
+}
+
+function aiConfirmRecipe(btn){
+  var rc=window.__aiRecipe; if(!rc){ toast('ไม่มีสูตรรอยืนยัน'); return; }
+  btn.disabled=true; btn.textContent='กำลังบันทึก...';
+  var ry=Number(rc.yield_units)||1;
+  var items=(rc.ingredients||[]).filter(function(it){ return it&&it.name_th; });
+  var seq=Promise.resolve([]);
+  items.forEach(function(it){
+    seq=seq.then(function(acc){
+      return api('ingredients?select=id&name_th=eq.'+encodeURIComponent(it.name_th)+'&limit=1').then(function(f){
+        if(f&&f.length){ acc.push({id:f[0].id,it:it}); return acc; }
+        var conv=Number(it.units_per_pack)||1;
+        var price=(it.pack_price!=null)? Number(it.pack_price):null;
+        return ensureSupplier(it.source).then(function(sid){
+          return api('ingredients',{method:'POST',prefer:'return=representation',body:{
+            supplier_id:sid, name_th:it.name_th,
+            buy_unit:it.buy_unit||null, use_unit:it.use_unit||null,
+            conversion:conv, pack_size:conv, last_price:price,
+            cost_per_use_unit: price!=null? +(price/conv).toFixed(4):null,
+            source:it.source||null, last_purchase_date: price!=null? todayISO():null
+          }}).then(function(rows){
+            var rid=rows&&rows[0]&&rows[0].id;
+            if(price!=null && rid) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:it.buy_unit||null,supplier_name:it.source||null,supplier_id:sid||null,purchase_date:todayISO()}}).catch(function(){});
+            acc.push({id:rid,it:it}); return acc;
+          });
+        });
+      });
+    });
+  });
+  seq.then(function(acc){
+    return api('products',{method:'POST',prefer:'return=representation',body:{
+      name:rc.product_name||'สินค้าใหม่',
+      sell_price: rc.sell_price!=null? Number(rc.sell_price):null,
+      note:'สร้างจากผู้ช่วย AI · สูตรเต็มได้ '+ry+' ชิ้น (ปริมาณในสูตร = ต่อ 1 ชิ้น)'
+    }}).then(function(pr){
+      var pid=pr&&pr[0]&&pr[0].id; if(!pid) throw new Error('สร้างสินค้าไม่สำเร็จ');
+      var ris=acc.filter(function(a){ return a.id; }).map(function(a){
+        return {product_id:pid, ingredient_id:a.id, qty:+(Number(a.it.qty_used||0)/ry).toFixed(2), unit:a.it.use_unit||null};
+      });
+      var p= ris.length? api('recipe_items',{method:'POST',body:ris}) : Promise.resolve();
+      return p.then(function(){ return {pid:pid,n:ris.length}; });
+    });
+  }).then(function(r){
+    audit('create','product',r.pid,{via:'ai',recipe:true,items:r.n});
+    var nm=rc.product_name||''; window.__aiRecipe=null;
+    aiPush('<div class="badge b-ok" style="margin:6px 0">✅ บันทึกสูตรแล้ว ('+r.n+' วัตถุดิบ)</div>'
+      +'<div style="margin:6px 0"><button class="btn btn-s" onclick="nav(\'#/prod/'+r.pid+'\')">เปิดดูสูตร '+esc(nm)+'</button></div>');
+    toast('บันทึกสูตรผ่าน AI แล้ว');
+  }).catch(function(e){ btn.disabled=false; btn.textContent='✓ บันทึกสูตร'; toast('บันทึกไม่สำเร็จ: '+(e&&e.message||'ลองอีกครั้ง')); });
 }
 
 boot();
