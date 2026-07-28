@@ -1754,23 +1754,64 @@ function saveTarget(){
   .catch(function(){ toast('บันทึกไม่สำเร็จ ลองอีกครั้ง'); });
 }
 function homeTarget(rev){
-  api('settings?select=value&key=eq.target').then(function(rows){
-    var cfg=rows&&rows[0]&&rows[0].value; if(!cfg||!cfg.product_id) return;
-    Promise.all([
-      api('products?select=*&id=eq.'+cfg.product_id),
-      api('recipe_items?select=*&product_id=eq.'+cfg.product_id),
-      api('ingredients?select=id,cost_per_use_unit&limit=500')
-    ]).then(function(res){
-      var p=res[0]&&res[0][0]; if(!p) return;
-      var ings={}; (res[2]||[]).forEach(function(i){ ings[i.id]=i; });
-      var r=tgtCalcFor(p, cfg, res[1]||[], ings); if(!r||r.be==null) return;
-      var pct=Math.min(100, Math.round(rev/r.beRev*100));
-      var el=document.getElementById('tgtHome'); if(!el) return;
-      el.innerHTML='<div class="card" onclick="nav(\'#/target\')" style="cursor:pointer"><div class="row"><b>🎯 เป้าคุ้มทุนเดือนนี้</b><span class="spacer"></span><span class="help">'+esc(p.name)+' ›</span></div>'
-        +'<div style="background:#e8ece9;border-radius:8px;height:10px;overflow:hidden;margin:8px 0"><div style="height:10px;border-radius:8px;background:'+(pct>=100?'var(--green)':'#e8a23d')+';width:'+pct+'%"></div></div>'
-        +'<div class="row"><b>'+pct+'%</b><span class="spacer"></span><span class="help">฿'+fmtMoney0(rev)+' / ฿'+fmtMoney0(r.beRev)+' ('+fmtMoney0(r.be)+' หน่วย)</span></div></div>';
-    }).catch(function(){});
+  Promise.all([
+    api('settings?select=value&key=eq.target'),
+    api('products?select=*&active=eq.true&order=name&limit=200'),
+    api('recipe_items?select=*&limit=1000'),
+    api('ingredients?select=id,cost_per_use_unit&limit=500')
+  ]).then(function(res){
+    var prods=(res[1]||[]).filter(function(p){ return Number(p.sell_price)>0; });
+    if(!prods.length) return;
+    var ings={}; (res[3]||[]).forEach(function(i){ ings[i.id]=i; });
+    window.__ht={ cfg:(res[0]&&res[0][0]&&res[0][0].value)||{}, prods:prods, items:res[2]||[], ings:ings, rev:rev };
+    htRender();
   }).catch(function(){});
+}
+function htRender(){
+  var d=window.__ht; if(!d) return;
+  var el=document.getElementById('tgtHome'); if(!el) return;
+  var cfg=d.cfg||{};
+  var p=null; d.prods.forEach(function(x){ if(x.id===cfg.product_id) p=x; });
+  if(!p) p=d.prods[0];
+  var eff={ salary:cfg.salary!=null?cfg.salary:15000, fixed:cfg.fixed!=null?cfg.fixed:2000, profit:cfg.profit||0, fc:cfg.fc!=null?cfg.fc:35 };
+  var r=tgtCalcFor(p, eff, d.items, d.ings); if(!r) return;
+  var chips=d.prods.map(function(x){
+    var on=x.id===p.id;
+    return '<button class="chip" style="flex-shrink:0;'+(on?'background:#fff;color:var(--green);border-color:#fff;':'background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35);')+'" onclick="htPick(\''+x.id+'\')">'+(on?'✓ ':'')+esc(x.name)+'</button>';
+  }).join('');
+  var inner, pct=0;
+  if(r.be==null){
+    inner='<div style="margin-top:8px">⚠️ '+esc(p.name)+' ราคาขายยังต่ำกว่าต้นทุน — แตะ "รายละเอียด" เพื่อปรับ</div>';
+  } else {
+    var rev=d.rev||0; pct=Math.min(100, Math.round(rev/r.beRev*100));
+    var unitsEq=Math.floor(rev/r.sp); var remainU=Math.max(0, r.be-unitsEq);
+    var t=todayISO(); var dd=Number(t.slice(8,10)); var dim=new Date(Number(t.slice(0,4)),Number(t.slice(5,7)),0).getDate();
+    var daysLeft=Math.max(1, dim-dd+1); var perDay=Math.ceil(remainU/daysLeft);
+    var emo,msg;
+    if(pct>=100){ emo='🎉'; msg='ทะลุเป้าแล้ว! เกินมา ฿'+fmtMoney0(rev-r.beRev)+' — ทุกบาทจากนี้คือกำไรล้วน ๆ'; }
+    else if(pct>=75){ emo='🚀'; msg='ใกล้มากแล้ว! เหลือแค่ '+fmtMoney0(remainU)+' หน่วย เฉลี่ยวันละ ~'+perDay+' ก็ถึงเป้า'; }
+    else if(pct>=50){ emo='🔥'; msg='เกินครึ่งทางแล้ว! เก็บต่อวันละ ~'+perDay+' หน่วย สบาย ๆ'; }
+    else if(pct>=25){ emo='💪'; msg='มาได้ 1 ใน 4 แล้ว จังหวะกำลังดี — วันละ ~'+perDay+' หน่วยถึงแน่นอน'; }
+    else { emo='🌱'; msg='ค่อย ๆ สะสมวันละ ~'+perDay+' หน่วย เดี๋ยวก็ถึงเป้า'; }
+    inner='<div style="display:flex;align-items:baseline;gap:10px;margin-top:10px"><span style="font-size:34px;font-weight:800">'+pct+'%</span><span style="opacity:.85">฿'+fmtMoney0(rev)+' / ฿'+fmtMoney0(r.beRev)+'</span></div>'
+      +'<div style="background:rgba(255,255,255,.25);border-radius:99px;height:14px;overflow:hidden;margin:8px 0"><div id="htBar" style="height:14px;border-radius:99px;background:linear-gradient(90deg,#ffd76a,#7dffb8);width:0%;transition:width .9s ease"></div></div>'
+      +'<div style="margin:2px 0 8px">'+emo+' '+msg+'</div>'
+      +'<div style="opacity:.85;font-size:13px">ขายแล้วเทียบเท่า <b>'+fmtMoney0(unitsEq)+'</b>/'+fmtMoney0(r.be)+' หน่วยของ '+esc(p.name)+(pct<100?' · เหลือ '+fmtMoney0(remainU)+' หน่วย ใน '+daysLeft+' วัน':'')+'</div>';
+  }
+  el.innerHTML='<div class="card" style="background:linear-gradient(135deg,#12563c,#1a7f5a);color:#fff">'
+    +'<div class="row"><b>🎯 เป้าคุ้มทุนเดือนนี้</b><span class="spacer"></span><a href="#/target" style="color:#cfeee0;text-decoration:none">รายละเอียด ›</a></div>'
+    +inner
+    +'<div class="chips" style="margin-top:10px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px">'+chips+'</div>'
+    +'<div style="opacity:.7;font-size:12px;margin-top:6px">แตะชื่อสินค้าเพื่อเปลี่ยนตัวเปรียบเทียบ — ระบบดึงต้นทุนสูตรของสินค้านั้นมาคำนวณใหม่</div>'
+    +'</div>';
+  setTimeout(function(){ var b=document.getElementById('htBar'); if(b) b.style.width=pct+'%'; }, 60);
+}
+function htPick(id){
+  var d=window.__ht; if(!d) return;
+  var c=d.cfg||{};
+  d.cfg={ product_id:id, salary:c.salary!=null?c.salary:15000, fixed:c.fixed!=null?c.fixed:2000, profit:c.profit||0, fc:c.fc!=null?c.fc:35 };
+  htRender();
+  api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'target',value:d.cfg,updated_at:new Date().toISOString()}}).catch(function(){});
 }
 
 boot();
