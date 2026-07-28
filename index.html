@@ -1796,7 +1796,8 @@ function htRender(){
     inner='<div style="display:flex;align-items:baseline;gap:10px;margin-top:10px"><span style="font-size:34px;font-weight:800">'+pct+'%</span><span style="opacity:.85">฿'+fmtMoney0(rev)+' / ฿'+fmtMoney0(r.beRev)+'</span></div>'
       +'<div style="background:rgba(255,255,255,.25);border-radius:99px;height:14px;overflow:hidden;margin:8px 0"><div id="htBar" style="height:14px;border-radius:99px;background:linear-gradient(90deg,#ffd76a,#7dffb8);width:0%;transition:width .9s ease"></div></div>'
       +'<div style="margin:2px 0 8px">'+emo+' '+msg+'</div>'
-      +'<div style="opacity:.85;font-size:13px">ขายแล้วเทียบเท่า <b>'+fmtMoney0(unitsEq)+'</b>/'+fmtMoney0(r.be)+' หน่วยของ '+esc(p.name)+(pct<100?' · เหลือ '+fmtMoney0(remainU)+' หน่วย ใน '+daysLeft+' วัน':'')+'</div>';
+      +'<div style="opacity:.85;font-size:13px">ขายแล้วเทียบเท่า <b>'+fmtMoney0(unitsEq)+'</b>/'+fmtMoney0(r.be)+' หน่วยของ '+esc(p.name)+'</div>'
+      +(pct<100?'<div style="opacity:.85;font-size:13px;margin-top:3px">เหลือ '+fmtMoney0(remainU)+' หน่วย ใน '+daysLeft+' วัน</div>':'');
   }
   el.innerHTML='<div class="card" style="background:linear-gradient(135deg,#12563c,#1a7f5a);color:#fff">'
     +'<div class="row"><b>🎯 Target เดือนนี้</b><span class="spacer"></span><a href="#/target" style="color:#cfeee0;text-decoration:none">รายละเอียด ›</a></div>'
