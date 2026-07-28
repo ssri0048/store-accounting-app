@@ -90,6 +90,19 @@ table.rep th{text-align:left;padding:7px 6px;border-bottom:2px solid var(--line)
 table.rep td{padding:7px 6px;border-bottom:1px solid var(--line)}
 table.rep td.num,table.rep th.num{text-align:right}
 .offline-bar{background:#96700f;color:#fff;text-align:center;font-size:13px;padding:6px;display:none}
+/* ---- UI polish (cosmetic only) ---- */
+#view>.grid2{margin-bottom:12px}
+.grid2>div:not(.stat),.grid3>div:not(.stat){min-width:0;display:flex;flex-direction:column;justify-content:flex-end}
+.grid2>div:not(.stat)>label,.grid3>div:not(.stat)>label{margin-top:0}
+input[type="date"],input[type="month"]{-webkit-appearance:none;appearance:none;min-width:0;min-height:47px;background:#fff}
+.grid2 input,.grid2 select,.grid3 input,.grid3 select{min-width:0}
+.stat{padding:14px;box-shadow:0 1px 2px rgba(18,60,42,.05)}
+.stat .val{margin-top:4px}
+.card{box-shadow:0 1px 2px rgba(18,60,42,.04)}
+.topbar{background:linear-gradient(135deg,#12563c,#1a7f5a)}
+.item .amt{flex-shrink:0;margin-left:4px}
+.chip.on{box-shadow:0 2px 6px rgba(26,127,90,.25)}
+.sheet h3{margin-top:2px}
 @media print{
   .topbar,.nav,.no-print,.offline-bar{display:none !important}
   body{background:#fff;padding:0}
@@ -270,12 +283,12 @@ routes.home = function(){
     });
     var h = '';
     h += '<div class="grid2">'
-      + '<div class="stat"><div class="lbl">รายรับวันนี้</div><div class="val pos">฿'+fmtMoney0(ti)+'</div></div>'
-      + '<div class="stat"><div class="lbl">รายจ่ายวันนี้</div><div class="val neg">฿'+fmtMoney0(te)+'</div></div>'
-      + '<div class="stat"><div class="lbl">กำไรวันนี้ (ประมาณ)</div><div class="val '+(ti-te>=0?'pos':'neg')+'">฿'+fmtMoney0(ti-te)+'</div></div>'
-      + '<div class="stat"><div class="lbl">กำไรเดือนนี้ (ประมาณ)</div><div class="val '+(mi-me>=0?'pos':'neg')+'">฿'+fmtMoney0(mi-me)+'</div></div>'
+      + '<div class="stat"><div class="lbl">💰 รายรับวันนี้</div><div class="val pos">฿'+fmtMoney0(ti)+'</div></div>'
+      + '<div class="stat"><div class="lbl">💸 รายจ่ายวันนี้</div><div class="val neg">฿'+fmtMoney0(te)+'</div></div>'
+      + '<div class="stat"><div class="lbl">✨ กำไรวันนี้ (ประมาณ)</div><div class="val '+(ti-te>=0?'pos':'neg')+'">฿'+fmtMoney0(ti-te)+'</div></div>'
+      + '<div class="stat"><div class="lbl">📈 กำไรเดือนนี้ (ประมาณ)</div><div class="val '+(mi-me>=0?'pos':'neg')+'">฿'+fmtMoney0(mi-me)+'</div></div>'
       + '</div>';
-    h += '<div class="card"><div class="row" style="margin-bottom:4px"><b>เดือนนี้</b><span class="spacer"></span><span class="help">'+fmtDate(m)+' – '+fmtDate(t)+'</span></div>'
+    h += '<div class="card"><div class="row" style="margin-bottom:4px"><b>📅 เดือนนี้</b><span class="spacer"></span><span class="help">'+fmtDate(m)+' – '+fmtDate(t)+'</span></div>'
       + '<div class="grid2"><div><div class="help">รายรับ</div><b class="pos">฿'+fmtMoney0(mi)+'</b></div>'
       + '<div><div class="help">รายจ่าย</div><b class="neg">฿'+fmtMoney0(me)+'</b></div></div></div>';
     h += '<div id="tgtHome"></div>';
@@ -323,7 +336,7 @@ function txnItem(r){
 routes.list = function(){
   setTop('รายการทั้งหมด');
   var f = S.lastList;
-  var h = '<div class="searchbar"><input id="q" placeholder="🔍 ค้นหา ร้านค้า / หมวด / เลขเอกสาร / รายละเอียด" value="'+esc(f.q)+'"></div>'
+  var h = '<div class="searchbar"><input id="q" placeholder="🔍 ค้นหา ร้าน / หมวด / รายละเอียด" value="'+esc(f.q)+'"></div>'
     + '<div class="chips no-print" style="margin-bottom:10px">'
     + ['','income','expense','purchase','sale'].map(function(tp){
         var names={'':'ทั้งหมด',income:'รายรับ',expense:'รายจ่าย',purchase:'ซื้อวัตถุดิบ',sale:'ยอดขาย'};
@@ -1284,7 +1297,7 @@ routes.check = function(){
     var inboxDocs = docs.filter(function(d){ return d.status!=='linked'; });
     var failedOcr = docs.filter(function(d){ return d.ocr_status==='failed'; });
     function ckItem(ok, name, detail){ return '<div class="item"><div class="ic '+(ok?'ic-in':'ic-ex')+'">'+(ok?'✅':'⚠️')+'</div><div class="main"><div class="t1">'+name+'</div><div class="t2">'+detail+'</div></div></div>'; }
-    var h='<div class="card"><b>Checklist ปิดเดือน (ตั้งแต่ '+fmtDate(m)+')</b>'
+    var h='<div class="card"><b>✅ Checklist ปิดเดือน (ตั้งแต่ '+fmtDate(m)+')</b>'
       + ckItem(pending.length===0,'ตรวจสอบรายการทั้งหมด', pending.length===0?'ไม่มีรายการค้างตรวจ':pending.length+' รายการรอตรวจ — เปิดดูจากหน้ารายการ')
       + ckItem(noDoc.length===0,'แนบหลักฐานรายจ่าย', noDoc.length===0?'รายจ่ายเดือนนี้มีหลักฐานครบ':noDoc.length+' รายการไม่มีหลักฐานแนบ')
       + ckItem(inboxDocs.length===0,'เชื่อมเอกสารกับรายการ', inboxDocs.length===0?'เอกสารเชื่อมครบทุกไฟล์':inboxDocs.length+' เอกสารยังอยู่ใน Inbox')
