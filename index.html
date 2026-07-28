@@ -99,7 +99,6 @@ input[type="date"],input[type="month"]{-webkit-appearance:none;appearance:none;m
 .stat{padding:14px;box-shadow:0 1px 2px rgba(18,60,42,.05)}
 .stat .val{margin-top:4px}
 .card{box-shadow:0 1px 2px rgba(18,60,42,.04)}
-.topbar{background:linear-gradient(135deg,#12563c,#1a7f5a)}
 .item .amt{flex-shrink:0;margin-left:4px}
 .chip.on{box-shadow:0 2px 6px rgba(26,127,90,.25)}
 .sheet h3{margin-top:2px}
@@ -441,8 +440,9 @@ function renderAddForm(d){
   var h = '<div class="card"><label style="margin-top:0">ประเภทรายการ <span class="req">*</span></label><div class="chips">'
     + types.map(function(t){ return '<button class="chip '+(d.txn_type===t[0]?'on':'')+'" onclick="chgType(\''+t[0]+'\')">'+t[1]+'</button>'; }).join('')
     + '</div>'
-    + '<div class="grid2"><div><label>วันที่ <span class="req">*</span></label><input type="date" id="f_date" value="'+esc(d.txn_date||todayISO())+'"><div class="help" id="dateBE"></div></div>'
+    + '<div class="grid2"><div><label>วันที่ <span class="req">*</span></label><input type="date" id="f_date" value="'+esc(d.txn_date||todayISO())+'"></div>'
     + '<div><label>จำนวนเงิน (บาท) <span class="req">*</span></label><input type="number" inputmode="decimal" step="0.01" id="f_amount" placeholder="0.00" value="'+(d.amount||'')+'"></div></div>'
+    + '<div class="help" id="dateBE"></div>'
     + '<label>หมวดหมู่ <span class="req">*</span></label><select id="f_cat">'
     + '<option value="">— เลือกหมวด —</option>'
     + cats.map(function(c){ return '<option '+(d.category_name===c.name_th?'selected':'')+'>'+esc(c.name_th)+'</option>'; }).join('')
