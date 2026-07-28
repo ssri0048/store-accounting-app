@@ -1044,6 +1044,7 @@ function expXlsx(){
     ]);
     XLSX.utils.book_append_sheet(wb, sum, 'Summary');
     XLSX.writeFile(wb, 'report_'+rpData.from+'_'+rpData.to+'.xlsx');
+    driveAsk('report_'+rpData.from+'_'+rpData.to+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}));
     audit('export','report',null,{type:'xlsx',from:rpData.from,to:rpData.to});
   }catch(e){ toast('Export ไม่สำเร็จ: '+e.message); }
 }
@@ -1057,6 +1058,7 @@ function expCsv(){
   var a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='report_'+rpData.from+'_'+rpData.to+'.csv'; a.click();
+  driveAsk('report_'+rpData.from+'_'+rpData.to+'.csv','text/csv', btoa(unescape(encodeURIComponent(csv))));
   audit('export','report',null,{type:'csv'});
 }
 
@@ -1903,6 +1905,7 @@ function rdXlsx(t,m,lines,ti,tp,to,personal,skipped){
     ws['!cols']=[{wch:14},{wch:46},{wch:12},{wch:15},{wch:17},{wch:30}];
     XLSX.utils.book_append_sheet(wb, ws, 'เงินสดรับ-จ่าย');
     XLSX.writeFile(wb, 'cash-report_'+m+'.xlsx');
+    driveAsk('cash-report_'+m+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}));
     toast('ดาวน์โหลด Excel แล้ว');
   }catch(e){ toast('Export ไม่สำเร็จ: '+e.message); }
 }
@@ -1919,7 +1922,7 @@ function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
     +'<p>รายรับสุทธิหักรายจ่าย (เบื้องต้น): <b>'+fmtMoney(ti-tp-to)+' บาท</b>'+(personal>0?' · เงินถอนใช้ส่วนตัว (ไม่รวมข้างต้น): '+fmtMoney(personal)+' บาท':'')+'</p>'
     +'<p style="font-size:11px;color:#555">จัดทำตามประกาศอธิบดีกรมสรรพากรเกี่ยวกับภาษีเงินได้ (ฉบับที่ 161) · เก็บหลักฐานประกอบทุกรายการอย่างน้อย 5 ปี · ใช้ประกอบการยื่น ภ.ง.ด.94 / ภ.ง.ด.90'+(skipped>0?' · เงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการไม่ถูกนับ':'')+'</p>'
     +'<scr'+'ipt>window.print()</scr'+'ipt></body></html>';
-  if(w && w.document){ w.document.write(html); w.document.close(); }
+  if(w && w.document){ w.document.write(html); w.document.close(); driveAsk('cash-report_'+m+'.html','text/html', btoa(unescape(encodeURIComponent(html)))); }
   else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='cash-report_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
 }
 
@@ -2035,6 +2038,27 @@ function certGen(btn){
 
 function toggleNodoc(){ S.lastList.nodoc=!S.lastList.nodoc; routes.list(); }
 function goNodoc(){ S.lastList.q=''; S.lastList.type=''; S.lastList.from=''; S.lastList.to=''; S.lastList.pending=false; S.lastList.nodoc=true; if(location.hash==='#/list'){ routes.list(); } else { nav('#/list'); } }
+
+function driveAsk(name,mime,b64){
+  window.__dx={name:name,mime:mime,b64:b64};
+  sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>☁️ เก็บสำเนาเข้า Google Drive?</h3>'
+    +'<div class="help">ไฟล์ดาวน์โหลดลงเครื่องแล้ว — ต้องการอัปโหลดสำเนา '+esc(name)+' ไปเก็บที่โฟลเดอร์ Store Accounting/09_Exports บน Google Drive ด้วยไหม?</div>'
+    +'<div class="grid2" style="margin-top:12px"><button class="btn btn-t" onclick="closeSheet()">ไม่ต้อง</button>'
+    +'<button class="btn btn-p" onclick="driveSend(this)">☁️ ซิงก์เข้า Drive</button></div>');
+}
+function driveSend(btn){
+  var d=window.__dx; if(!d){ toast('ไม่มีไฟล์'); return; }
+  btn.disabled=true; btn.textContent='กำลังอัปโหลด...';
+  fetch(CFG.fnUrl+'/uploadexport',{method:'POST',headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key,'Content-Type':'application/json'},
+    body:JSON.stringify({name:d.name,mime:d.mime,base64:d.b64})})
+  .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+  .then(function(res){
+    if(!res.ok||res.j.error||!res.j.ok) throw new Error(res.j.error||'อัปโหลดไม่สำเร็จ');
+    var nm=d.name; window.__dx=null; closeSheet();
+    toast('☁️ เก็บสำเนา '+nm+' ใน Drive (09_Exports) แล้ว ✓');
+    audit('export','drive',res.j.drive_id,{name:nm});
+  }).catch(function(e){ btn.disabled=false; btn.textContent='☁️ ซิงก์เข้า Drive'; toast('ไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
+}
 
 boot();
 render();
