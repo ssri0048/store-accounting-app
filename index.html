@@ -651,11 +651,14 @@ function applyOcr(d){
   toast('AI กรอกข้อมูลให้แล้ว โปรดตรวจสอบก่อนบันทึก');
 }
 function openDocFile(docId){
+  var w = window.open('about:blank','_blank');
   api('documents?select=storage_path,drive_url&id=eq.'+docId).then(function(rows){
-    var r=rows&&rows[0]; if(!r){ toast('ไม่พบเอกสาร'); return; }
-    var u = r.drive_url || (CFG.url+'/storage/v1/object/public/receipts/'+r.storage_path);
-    window.open(u,'_blank');
-  });
+    var r=rows&&rows[0];
+    if(!r){ if(w) w.close(); toast('ไม่พบเอกสาร'); return; }
+    var u = r.storage_path? (CFG.url+'/storage/v1/object/public/receipts/'+r.storage_path) : r.drive_url;
+    if(!u){ if(w) w.close(); toast('เอกสารนี้ไม่มีไฟล์แนบ'); return; }
+    if(w){ w.location = u; } else { window.location.href = u; }
+  }).catch(function(){ if(w) w.close(); toast('เปิดเอกสารไม่สำเร็จ ลองอีกครั้ง'); });
 }
 
 /* ================== DOCUMENTS ================== */
