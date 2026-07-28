@@ -461,6 +461,7 @@ function renderAddForm(d){
     var el=document.getElementById(id); if(el) el.addEventListener('input', saveDraft);
   });
   window.__curType = d.txn_type||'expense';
+  attachSupSuggest('f_party');
 }
 function updBE(){
   var v=document.getElementById('f_date').value;
@@ -1053,36 +1054,63 @@ routes.status = function(){
   setTop('สถานะฐานข้อมูล', true);
   V('<div class="skel"></div><div class="skel"></div>');
   Promise.all([
-    count('transactions',''), count('transactions','txn_date=gte.'+monthStartISO()),
-    count('documents',''), count('documents','ocr_status=eq.done'),
-    count('documents','ocr_status=eq.failed'), count('transactions','review_status=eq.pending'),
-    count('transactions','is_demo=eq.true'), count('audit_log','')
+    count('transactions',''),
+    count('transactions','txn_date=gte.'+monthStartISO()),
+    count('documents',''),
+    count('documents','ocr_status=eq.done'),
+    count('documents','ocr_status=eq.failed&status=neq.linked'),
+    count('transactions','review_status=eq.pending'),
+    count('transactions','is_demo=eq.true'),
+    count('audit_log',''),
+    count('documents','drive_file_id=not.is.null'),
+    count('documents','drive_file_id=is.null&storage_path=not.is.null'),
+    count('ingredients','active=eq.true'),
+    count('products','active=eq.true'),
+    count('suppliers','active=eq.true'),
+    fetch(CFG.fnUrl+'/health').then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(c){
     var ok = c[0]>=0;
-    var h='<div class="card"><b>การเชื่อมต่อ</b>'
-      + stLine('ฐานข้อมูล (Supabase)', ok?'ok':'err', ok?'เชื่อมต่อปกติ':'เชื่อมต่อไม่ได้')
-      + stLine('ที่เก็บไฟล์ (Storage)', ok?'ok':'err', ok?'พร้อมใช้งาน':'-')
-      + stLine('AI อ่านเอกสาร (Gemini)', 'warn', 'ทำงานเมื่อใส่ API Key แล้ว — ทดสอบได้จากการแนบรูปในหน้าเพิ่มรายการ')
-      + stLine('Google Drive', 'ok', 'โฟลเดอร์พร้อมใช้ (เปิดจากเมนูอื่น ๆ)')
+    var hs = c[13]||{};
+    var h='<div class="card"><b>การเชื่อมต่อ (ตรวจสดตอนนี้)</b>'
+      + stLine('ฐานข้อมูล (Supabase)', ok?'ok':'err', ok?'เชื่อมต่อปกติ':'เชื่อมต่อไม่ได้ — ลองรีเฟรช')
+      + stLine('AI อ่านเอกสาร (Gemini)', c[13]===null?'err':(hs.gemini?'ok':'warn'), c[13]===null?'ติดต่อเซิร์ฟเวอร์ AI ไม่ได้':(hs.gemini?'ตั้งค่า Key แล้ว (โควตาฟรี ~20 ครั้ง/วัน รีเซ็ตราวบ่ายสอง)':'ยังไม่ได้ใส่ API Key'))
+      + stLine('Google Drive Sync', c[13]===null?'err':(hs.drive?'ok':'warn'), c[13]===null?'ตรวจไม่ได้':(hs.drive? 'เชื่อมบัญชี Google แล้ว · ขึ้น Drive แล้ว '+c[8]+' ไฟล์'+(c[9]>0?' · รอซิงก์ '+c[9]+' ไฟล์ (ระบบซิงก์เองทุกชั่วโมง)':' · ไม่มีไฟล์ค้าง') : 'ยังไม่ได้เชื่อมบัญชี Google'))
       + '</div>';
-    h+='<div class="card"><b>ข้อมูลในระบบ</b>'
-      + '<div class="grid2" style="margin-top:10px">'
+    h+='<div class="card"><b>ข้อมูลในระบบ</b><div class="grid2" style="margin-top:10px">'
       + '<div class="stat"><div class="lbl">รายการทั้งหมด</div><div class="val">'+c[0]+'</div></div>'
       + '<div class="stat"><div class="lbl">รายการเดือนนี้</div><div class="val">'+c[1]+'</div></div>'
       + '<div class="stat"><div class="lbl">เอกสารทั้งหมด</div><div class="val">'+c[2]+'</div></div>'
+      + '<div class="stat"><div class="lbl">ขึ้น Drive แล้ว</div><div class="val">'+c[8]+'</div></div>'
+      + '<div class="stat"><div class="lbl">รอซิงก์ Drive</div><div class="val '+(c[9]>0?'neg':'pos')+'">'+c[9]+'</div></div>'
       + '<div class="stat"><div class="lbl">OCR สำเร็จ</div><div class="val">'+c[3]+'</div></div>'
-      + '<div class="stat"><div class="lbl">OCR ล้มเหลว</div><div class="val '+(c[4]>0?'neg':'')+'">'+c[4]+'</div></div>'
-      + '<div class="stat"><div class="lbl">รอตรวจสอบ</div><div class="val '+(c[5]>0?'neg':'')+'">'+c[5]+'</div></div>'
-      + '</div>'
-      + '<div class="help" style="margin-top:8px">Audit log: '+c[7]+' รายการ · ข้อมูลตัวอย่าง (demo): '+c[6]+' รายการ</div></div>';
+      + '<div class="stat"><div class="lbl">OCR ค้าง (ยังไม่เชื่อมรายการ)</div><div class="val '+(c[4]>0?'neg':'pos')+'">'+c[4]+'</div></div>'
+      + '<div class="stat"><div class="lbl">รายการรอตรวจสอบ</div><div class="val '+(c[5]>0?'neg':'pos')+'">'+c[5]+'</div></div>'
+      + '<div class="stat"><div class="lbl">วัตถุดิบ</div><div class="val">'+c[10]+'</div></div>'
+      + '<div class="stat"><div class="lbl">สินค้า</div><div class="val">'+c[11]+'</div></div>'
+      + '<div class="stat"><div class="lbl">Supplier</div><div class="val">'+c[12]+'</div></div>'
+      + '<div class="stat"><div class="lbl">ประวัติการใช้งาน (Audit)</div><div class="val">'+c[7]+'</div></div>'
+      + '</div><div class="help" style="margin-top:8px">ข้อมูลตัวอย่าง (demo) คงเหลือ: '+c[6]+' รายการ</div></div>';
     h+='<div class="card"><b>เครื่องมือ</b><div class="grid2" style="margin-top:10px">'
-      + '<button class="btn btn-s" onclick="render()">🔄 Sync ใหม่</button>'
+      + '<button class="btn btn-s" onclick="render()">🔄 รีเฟรชสถานะ</button>'
+      + '<button class="btn btn-s" onclick="syncDriveNow(this)">☁️ ซิงก์ Drive เดี๋ยวนี้</button>'
       + '<button class="btn btn-s" onclick="window.open(CFG.driveUrl)">📁 เปิด Drive</button>'
       + (c[6]>0? '<button class="btn btn-d" onclick="delDemo()">🧹 ลบข้อมูลตัวอย่าง</button>':'')
-      + '</div></div>';
+      + '</div><div id="syncResult" class="help" style="margin-top:8px"></div></div>';
     V(h);
-  });
+  }).catch(function(){ V('<div class="card"><div class="empty">โหลดสถานะไม่สำเร็จ<br><button class="btn btn-s" style="margin-top:8px" onclick="render()">ลองอีกครั้ง</button></div></div>'); });
 };
+function syncDriveNow(btn){
+  btn.disabled=true; btn.textContent='กำลังซิงก์...';
+  fetch(CFG.fnUrl+'/drivesync').then(function(r){ return r.json(); }).then(function(j){
+    var n=(j.results||[]).filter(function(x){ return x.drive_id; }).length;
+    var res=document.getElementById('syncResult');
+    if(res) res.textContent = j.error? ('ซิงก์ไม่สำเร็จ: '+j.error) : ('ตรวจ '+(j.checked||0)+' ไฟล์ · ขึ้น Drive สำเร็จ '+n+' ไฟล์');
+    setTimeout(render, 1500);
+  }).catch(function(){
+    var res=document.getElementById('syncResult'); if(res) res.textContent='เรียกซิงก์ไม่สำเร็จ ลองอีกครั้ง';
+    btn.disabled=false; btn.textContent='☁️ ซิงก์ Drive เดี๋ยวนี้';
+  });
+}
 function stLine(name, st, msg){
   var b = st==='ok'?'b-ok':st==='warn'?'b-warn':'b-err';
   var t = st==='ok'?'ปกติ':st==='warn'?'รอตั้งค่า':'มีปัญหา';
@@ -1537,10 +1565,25 @@ function attachSupSuggest(inputId){
   }
   inp.addEventListener('input', show);
   inp.addEventListener('focus', show);
-  if(S.supNames){ /* cached */ }
-  api('suppliers?select=name&active=eq.true&order=name&limit=200').then(function(r){
-    S.supNames=(r||[]).map(function(x){ return x.name; });
-  }).catch(function(){});
+  loadVendorNames();
+}
+
+function loadVendorNames(){
+  return Promise.all([
+    api('suppliers?select=name&active=eq.true&limit=300'),
+    api('ingredients?select=source&source=not.is.null&limit=300'),
+    api('ingredient_prices?select=supplier_name&supplier_name=not.is.null&limit=300'),
+    api('transactions?select=party_name&party_name=not.is.null&order=created_at.desc&limit=300')
+  ]).then(function(res){
+    var set={};
+    (res[0]||[]).forEach(function(x){ if(x.name) set[String(x.name).trim()]=1; });
+    (res[1]||[]).forEach(function(x){ if(x.source) set[String(x.source).trim()]=1; });
+    (res[2]||[]).forEach(function(x){ if(x.supplier_name) set[String(x.supplier_name).trim()]=1; });
+    (res[3]||[]).forEach(function(x){ if(x.party_name) set[String(x.party_name).trim()]=1; });
+    delete set[''];
+    S.supNames=Object.keys(set).sort();
+    return S.supNames;
+  }).catch(function(){ return S.supNames||[]; });
 }
 
 boot();
