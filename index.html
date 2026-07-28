@@ -1004,11 +1004,9 @@ function loadReport(){
       + Object.keys(byCat).sort().map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="num">฿'+fmtMoney(byCat[k])+'</td></tr>'; }).join('')
       + '</table>'
       + '<div class="help" style="margin-top:10px">'+rows.length+' รายการ · ตัวเลขนี้เป็นข้อมูลเบื้องต้นสำหรับส่งต่อนักบัญชี ไม่ใช่งบการเงินตามมาตรฐานบัญชี</div></div>'
-      + '<div class="card no-print"><b>Export</b><div class="grid3" style="margin-top:10px">'
-      + '<button class="btn btn-s" onclick="expXlsx()">📗 Excel</button>'
-      + '<button class="btn btn-s" onclick="expCsv()">📄 CSV</button>'
-      + '<button class="btn btn-s" onclick="window.print()">🖨 PDF</button></div>'
-      + '<button class="btn btn-p btn-block" style="margin-top:8px" onclick="rdSheet()">🧾 รายงานเงินสดรับ-จ่าย (แบบยื่นสรรพากร)</button>'
+      + '<div class="card no-print"><b>Export</b>'
+      + '<button class="btn btn-p btn-block" style="margin-top:10px" onclick="expSheet()">📤 Export / ซิงก์ Drive (รายงานสรุป)</button>'
+      + '<button class="btn btn-s btn-block" style="margin-top:8px" onclick="rdSheet()">🧾 รายงานเงินสดรับ-จ่าย (แบบยื่นสรรพากร)</button>'
       + '<div class="help" style="margin-top:8px">PDF: กด "🖨 PDF" แล้วเลือก "บันทึกเป็น PDF" ในหน้าจอพิมพ์ของมือถือ · แนะนำอัปโหลดไฟล์ที่ได้ไปเก็บในโฟลเดอร์ 09_Exports บน Google Drive</div></div>';
     document.getElementById('rpBody').innerHTML=h;
   }).catch(function(){ document.getElementById('rpBody').innerHTML='<div class="card"><div class="empty">โหลดไม่สำเร็จ<br><button class="btn btn-s" style="margin-top:8px" onclick="loadReport()">ลองอีกครั้ง</button></div></div>'; });
@@ -1837,8 +1835,15 @@ function rdSheet(){
       +'<label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน 13 หลัก</label><input id="rd_taxid" inputmode="numeric" value="'+esc(t.tax_id||'')+'">'
       +'<label>ชื่อสถานประกอบการ</label><input id="rd_shop" value="'+esc(t.shop||S.store.name||'')+'">'
       +'<label>เดือนที่ต้องการ</label><input type="month" id="rd_month" value="'+m+'">'
-      +'<div class="grid2" style="margin-top:12px"><button class="btn btn-s" onclick="rdGen(\'xlsx\')">📗 Excel</button>'
-      +'<button class="btn btn-p" onclick="rdGen(\'print\')">🖨 พิมพ์ / PDF</button></div>');
+      +'<label style="margin-top:12px">Step 1 — เลือกรูปแบบเอกสาร</label><div class="chips" id="rdTypes" style="margin-top:6px">'
+      +'<button class="chip on" data-t="xlsx" onclick="rdPick(this)">📗 Excel</button>'
+      +'<button class="chip" data-t="print" onclick="rdPick(this)">🖨 พิมพ์ / PDF</button></div>'
+      +'<label style="margin-top:12px">Step 2 — ให้ทำอะไรบ้าง (เลือกได้ทั้งคู่)</label><div class="chips" style="margin-top:6px">'
+      +'<button class="chip on" onclick="rdTgl(this,\'dl\')">⬇️ ดาวน์โหลด/พิมพ์</button>'
+      +'<button class="chip on" onclick="rdTgl(this,\'dr\')">☁️ ซิงก์เข้า Drive</button></div>'
+      +'<div class="help" style="margin-top:8px">ไฟล์ใน Drive เก็บแยกที่ Store Accounting/09_Exports/<b>รายงานสรรพากร</b></div>'
+      +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="rdRun(this)">✓ ตกลง</button>');
+    window.__rdOpt={type:'xlsx',dl:true,dr:true};
   }).catch(function(){ toast('โหลดการตั้งค่าไม่สำเร็จ'); });
 }
 function rdGen(mode){
@@ -1847,7 +1852,7 @@ function rdGen(mode){
     shop:document.getElementById('rd_shop').value.trim() };
   var m=document.getElementById('rd_month').value; if(!m){ toast('เลือกเดือนก่อน'); return; }
   api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'taxinfo',value:t,updated_at:new Date().toISOString()}}).catch(function(){});
-  var w=null; if(mode==='print'){ w=window.open('','_blank'); }
+  var w=null; if(mode==='print' && (window.__rdOpt||{dl:true}).dl){ w=window.open('','_blank'); }
   var from=m+'-01';
   var y=Number(m.slice(0,4)), mo=Number(m.slice(5,7));
   var last=new Date(y, mo, 0).getDate();
@@ -1904,9 +1909,9 @@ function rdXlsx(t,m,lines,ti,tp,to,personal,skipped){
     var wb=XLSX.utils.book_new(); var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols']=[{wch:14},{wch:46},{wch:12},{wch:15},{wch:17},{wch:30}];
     XLSX.utils.book_append_sheet(wb, ws, 'เงินสดรับ-จ่าย');
-    XLSX.writeFile(wb, 'cash-report_'+m+'.xlsx');
-    driveAsk('cash-report_'+m+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}));
-    toast('ดาวน์โหลด Excel แล้ว');
+    var o=window.__rdOpt||{dl:true,dr:false};
+    if(o.dl){ XLSX.writeFile(wb, 'รายงานเงินสดรับจ่าย_'+m+'.xlsx'); toast('ดาวน์โหลด Excel แล้ว'); }
+    if(o.dr) driveUp('รายงานเงินสดรับจ่าย_'+m+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}),'รายงานสรรพากร');
   }catch(e){ toast('Export ไม่สำเร็จ: '+e.message); }
 }
 function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
@@ -1922,8 +1927,12 @@ function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
     +'<p>รายรับสุทธิหักรายจ่าย (เบื้องต้น): <b>'+fmtMoney(ti-tp-to)+' บาท</b>'+(personal>0?' · เงินถอนใช้ส่วนตัว (ไม่รวมข้างต้น): '+fmtMoney(personal)+' บาท':'')+'</p>'
     +'<p style="font-size:11px;color:#555">จัดทำตามประกาศอธิบดีกรมสรรพากรเกี่ยวกับภาษีเงินได้ (ฉบับที่ 161) · เก็บหลักฐานประกอบทุกรายการอย่างน้อย 5 ปี · ใช้ประกอบการยื่น ภ.ง.ด.94 / ภ.ง.ด.90'+(skipped>0?' · เงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการไม่ถูกนับ':'')+'</p>'
     +'<scr'+'ipt>window.print()</scr'+'ipt></body></html>';
-  if(w && w.document){ w.document.write(html); w.document.close(); driveAsk('cash-report_'+m+'.html','text/html', btoa(unescape(encodeURIComponent(html)))); }
-  else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='cash-report_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
+  var o=window.__rdOpt||{dl:true,dr:false};
+  if(o.dl){
+    if(w && w.document){ w.document.write(html); w.document.close(); }
+    else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='รายงานเงินสดรับจ่าย_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
+  } else if(w){ w.close(); }
+  if(o.dr) driveUp('รายงานเงินสดรับจ่าย_'+m+'.html','text/html', btoa(unescape(encodeURIComponent(html))),'รายงานสรรพากร');
 }
 
 /* ================== CERT: ใบรับรองแทนใบเสร็จรับเงิน ================== */
@@ -2058,6 +2067,67 @@ function driveSend(btn){
     toast('☁️ เก็บสำเนา '+nm+' ใน Drive (09_Exports) แล้ว ✓');
     audit('export','drive',res.j.drive_id,{name:nm});
   }).catch(function(e){ btn.disabled=false; btn.textContent='☁️ ซิงก์เข้า Drive'; toast('ไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
+}
+
+function expSheet(){
+  if(!rpData){ toast('สร้างรายงานก่อน'); return; }
+  window.__exOpt={type:'xlsx',dl:true,dr:true};
+  sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>📤 Export รายงานสรุป</h3>'
+    +'<label>Step 1 — เลือกรูปแบบเอกสาร</label><div class="chips" id="exTypes" style="margin-top:6px">'
+    +'<button class="chip on" data-t="xlsx" onclick="exPick(this)">📗 Excel</button>'
+    +'<button class="chip" data-t="csv" onclick="exPick(this)">📄 CSV</button>'
+    +'<button class="chip" data-t="pdf" onclick="exPick(this)">🖨 PDF / พิมพ์</button></div>'
+    +'<label style="margin-top:12px">Step 2 — ให้ทำอะไรบ้าง (เลือกได้ทั้งคู่)</label><div class="chips" style="margin-top:6px">'
+    +'<button class="chip on" onclick="exTgl(this,\'dl\')">⬇️ ดาวน์โหลด/พิมพ์</button>'
+    +'<button class="chip on" onclick="exTgl(this,\'dr\')">☁️ ซิงก์เข้า Drive</button></div>'
+    +'<div class="help" style="margin-top:8px">ไฟล์ใน Drive เก็บแยกที่ Store Accounting/09_Exports/<b>รายงานสรุป</b> · แบบ PDF เมื่อซิงก์จะเก็บเป็นไฟล์เอกสารเปิดดูได้</div>'
+    +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="expRun(this)">✓ ตกลง</button>');
+}
+function exPick(el){ var box=document.getElementById('exTypes'); if(box){ Array.prototype.forEach.call(box.children,function(c){ c.classList.remove('on'); }); } el.classList.add('on'); if(window.__exOpt) window.__exOpt.type=el.getAttribute('data-t'); }
+function exTgl(el,k){ var o=window.__exOpt||(window.__exOpt={type:'xlsx',dl:true,dr:true}); o[k]=!o[k]; el.classList.toggle('on'); if(!o.dl&&!o.dr){ o[k]=true; el.classList.add('on'); toast('ต้องเลือกอย่างน้อย 1 อย่าง'); } }
+function rdPick(el){ var box=document.getElementById('rdTypes'); if(box){ Array.prototype.forEach.call(box.children,function(c){ c.classList.remove('on'); }); } el.classList.add('on'); if(window.__rdOpt) window.__rdOpt.type=el.getAttribute('data-t'); }
+function rdTgl(el,k){ var o=window.__rdOpt||(window.__rdOpt={type:'xlsx',dl:true,dr:true}); o[k]=!o[k]; el.classList.toggle('on'); if(!o.dl&&!o.dr){ o[k]=true; el.classList.add('on'); toast('ต้องเลือกอย่างน้อย 1 อย่าง'); } }
+function rdRun(btn){ var o=window.__rdOpt||{}; if(!o.dl&&!o.dr){ toast('เลือกอย่างน้อย 1 อย่าง'); return; } btn.disabled=true; rdGen(o.type||'xlsx'); setTimeout(function(){ btn.disabled=false; },3000); }
+function expRun(btn){
+  var o=window.__exOpt||{}; if(!rpData){ toast('สร้างรายงานก่อน'); return; }
+  if(!o.dl&&!o.dr){ toast('เลือกอย่างน้อย 1 อย่าง'); return; }
+  btn.disabled=true;
+  var base='รายงานสรุป_'+rpData.from+'_ถึง_'+rpData.to;
+  var MX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  try{
+    if(o.type==='xlsx'){
+      var wb=XLSX.utils.book_new();
+      var ws=XLSX.utils.json_to_sheet(rpRows());
+      XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+      var inc=0,exp=0; rpData.rows.forEach(function(r){ var i=(r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in'); if(i)inc+=Number(r.amount)||0; else exp+=Number(r.amount)||0; });
+      var sm=XLSX.utils.json_to_sheet([{ 'รายการ':'ร้าน','ค่า':S.store.name },{ 'รายการ':'ช่วงวันที่','ค่า':rpData.from+' ถึง '+rpData.to },{ 'รายการ':'รายรับรวม','ค่า':inc },{ 'รายการ':'รายจ่ายรวม','ค่า':exp },{ 'รายการ':'กำไรเบื้องต้น','ค่า':inc-exp }]);
+      XLSX.utils.book_append_sheet(wb, sm, 'Summary');
+      if(o.dl) XLSX.writeFile(wb, base+'.xlsx');
+      if(o.dr) driveUp(base+'.xlsx', MX, XLSX.write(wb,{bookType:'xlsx',type:'base64'}), 'รายงานสรุป');
+    } else if(o.type==='csv'){
+      var rows=rpRows(); if(!rows.length){ toast('ไม่มีข้อมูล'); btn.disabled=false; return; }
+      var keys=Object.keys(rows[0]);
+      var csv='﻿'+keys.join(',')+String.fromCharCode(10)+rows.map(function(r){ return keys.map(function(k){ var v=String(r[k]==null?'':r[k]); return '"'+v.replace(/"/g,'""')+'"'; }).join(','); }).join(String.fromCharCode(10));
+      if(o.dl){ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=base+'.csv'; a.click(); }
+      if(o.dr) driveUp(base+'.csv','text/csv', btoa(unescape(encodeURIComponent(csv))), 'รายงานสรุป');
+    } else {
+      if(o.dr){ var pa=document.getElementById('printArea'); var html='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>'+base+'</title></head><body style="font-family:sans-serif">'+(pa?pa.outerHTML:'ไม่มีข้อมูล')+'</body></html>'; driveUp(base+'.html','text/html', btoa(unescape(encodeURIComponent(html))), 'รายงานสรุป'); }
+      if(o.dl){ closeSheet(); audit('export','report',null,{type:'pdf'}); setTimeout(function(){ window.print(); },300); return; }
+    }
+    audit('export','report',null,{type:o.type,dl:!!o.dl,dr:!!o.dr});
+    closeSheet(); if(o.dl) toast('ดาวน์โหลดแล้ว ✓');
+  }catch(e){ btn.disabled=false; toast('ไม่สำเร็จ: '+e.message); }
+}
+function driveUp(name,mime,b64,sub){
+  toast('☁️ กำลังอัปโหลดเข้า Drive...');
+  return fetch(CFG.fnUrl+'/uploadexport',{method:'POST',headers:{'apikey':CFG.key,'Authorization':'Bearer '+CFG.key,'Content-Type':'application/json'},
+    body:JSON.stringify({name:name,mime:mime,base64:b64,sub:sub||''})})
+  .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+  .then(function(res){
+    if(!res.ok||res.j.error||!res.j.ok) throw new Error(res.j.error||'อัปโหลดไม่สำเร็จ');
+    toast('☁️ เก็บใน Drive → 09_Exports/'+(sub||'')+' แล้ว ✓');
+    audit('export','drive',res.j.drive_id,{name:name,sub:sub||''});
+  }).catch(function(e){ toast('ซิงก์ Drive ไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
 }
 
 boot();
