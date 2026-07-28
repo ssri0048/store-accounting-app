@@ -283,9 +283,9 @@ routes.home = function(){
       + '<button class="btn btn-s" onclick="location.hash=\'#/docs/upload\'">📷 ถ่าย/อัปโหลดใบเสร็จ</button>'
       + '</div></div>';
     var warn = [];
-    if(res[3]>0) warn.push('<a class="menu-item" href="javascript:goPending()" style="border:none;padding:8px 0"><span class="mi">🕐</span> รายการรอตรวจสอบ <span class="badge b-warn" style="margin-left:6px">'+res[3]+'</span><span class="arr">›</span></a>');
-    if(res[2]>0) warn.push('<a class="menu-item" href="#/docs" style="border:none;padding:8px 0"><span class="mi">⚠️</span> เอกสาร OCR ไม่สำเร็จ <span class="badge b-err" style="margin-left:6px">'+res[2]+'</span><span class="arr">›</span></a>');
-    if(noDoc>0) warn.push('<div class="menu-item" style="border:none;padding:8px 0"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span></div>');
+    if(res[3]>0) warn.push('<div class="menu-item" onclick="goPending()" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">🕐</span> รายการรอตรวจสอบ <span class="badge b-warn" style="margin-left:6px">'+res[3]+'</span><span class="arr">›</span></div>');
+    if(res[2]>0) warn.push('<div class="menu-item" onclick="nav(\'#/docs\')" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">⚠️</span> เอกสาร OCR ไม่สำเร็จ <span class="badge b-err" style="margin-left:6px">'+res[2]+'</span><span class="arr">›</span></div>');
+    if(noDoc>0) warn.push('<div class="menu-item" onclick="nav(\'#/check\')" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span><span class="arr">›</span></div>');
     if(warn.length) h += '<div class="card"><b>งานที่ต้องทำต่อ</b>'+warn.join('')+'</div>';
     var pMap={}; (res[5]||[]).forEach(function(i){ pMap[i.id]=i; });
     var seenP={}, priceUps=[];
