@@ -278,6 +278,8 @@ routes.home = function(){
     h += '<div class="card"><div class="row" style="margin-bottom:4px"><b>เดือนนี้</b><span class="spacer"></span><span class="help">'+fmtDate(m)+' – '+fmtDate(t)+'</span></div>'
       + '<div class="grid2"><div><div class="help">รายรับ</div><b class="pos">฿'+fmtMoney0(mi)+'</b></div>'
       + '<div><div class="help">รายจ่าย</div><b class="neg">฿'+fmtMoney0(me)+'</b></div></div></div>';
+    h += '<div id="tgtHome"></div>';
+    setTimeout(function(){ homeTarget(mi); }, 80);
     h += '<div class="card"><b>เพิ่มรายการด่วน</b><div class="grid2" style="margin-top:10px">'
       + '<button class="btn btn-p" onclick="location.hash=\'#/add\'">＋ เพิ่มรายการ</button>'
       + '<button class="btn btn-s" onclick="location.hash=\'#/docs/upload\'">📷 ถ่าย/อัปโหลดใบเสร็จ</button>'
@@ -690,6 +692,7 @@ routes.more = function(){
     + mItem('#/ing','🥬','วัตถุดิบและต้นทุน')
     + mItem('#/prod','🧁','สินค้าและสูตร')
     + mItem('#/sup','🚚','Supplier / แหล่งซื้อ')
+    + mItem('#/target','🎯','เป้าหมาย & จุดคุ้มทุน')
     + mItem('#/report','📊','รายงานและ Export')
     + mItem('#/ai','🤖','ผู้ช่วย AI')
     + mItem('#/check','🔍','ตรวจสอบข้อมูล / ปิดเดือน')
@@ -1652,6 +1655,122 @@ function aiConfirmRecipe(btn){
       +'<div style="margin:6px 0"><button class="btn btn-s" onclick="nav(\'#/prod/'+r.pid+'\')">เปิดดูสูตร '+esc(nm)+'</button></div>');
     toast('บันทึกสูตรผ่าน AI แล้ว');
   }).catch(function(e){ btn.disabled=false; btn.textContent='✓ บันทึกสูตร'; toast('บันทึกไม่สำเร็จ: '+(e&&e.message||'ลองอีกครั้ง')); });
+}
+
+/* ================== TARGET / BREAK-EVEN ================== */
+routes.target = function(){
+  setTop('เป้าหมาย & จุดคุ้มทุน', true);
+  V('<div class="skel"></div><div class="skel"></div>');
+  var m=monthStartISO();
+  Promise.all([
+    api('settings?select=value&key=eq.target'),
+    api('products?select=*&active=eq.true&order=name&limit=200'),
+    api('recipe_items?select=*&limit=1000'),
+    api('ingredients?select=id,cost_per_use_unit&limit=500'),
+    api('transactions?select=txn_type,amount&txn_date=gte.'+m+'&limit=2000')
+  ]).then(function(res){
+    var rev=0; (res[4]||[]).forEach(function(r){ if(r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in') rev+=Number(r.amount)||0; });
+    var ings={}; (res[3]||[]).forEach(function(i){ ings[i.id]=i; });
+    window.__tgt={ cfg:(res[0]&&res[0][0]&&res[0][0].value)||{}, prods:res[1]||[], items:res[2]||[], ings:ings, rev:rev };
+    tgtRender();
+  }).catch(function(){ V('<div class="card"><div class="empty">โหลดไม่สำเร็จ<br><button class="btn btn-s" style="margin-top:8px" onclick="render()">ลองอีกครั้ง</button></div></div>'); });
+};
+function tgtCalcFor(p, cfg, items, ings){
+  var sp=Number(p.sell_price)||0; if(sp<=0) return null;
+  var c=calcCost(p, items, ings);
+  var fromRecipe = c.total>0;
+  var cost = fromRecipe? c.total : +(sp*((Number(cfg.fc)||35)/100)).toFixed(2);
+  var contr = +(sp-cost).toFixed(2);
+  var F = (Number(cfg.salary)||0)+(Number(cfg.fixed)||0)+(Number(cfg.profit)||0);
+  if(contr<=0) return {sp:sp,cost:cost,contr:contr,F:F,be:null,fromRecipe:fromRecipe};
+  var be=Math.ceil(F/contr);
+  return {sp:sp,cost:cost,contr:contr,F:F,be:be,beRev:Math.round(be*sp),fromRecipe:fromRecipe};
+}
+function tgtReadCfg(){
+  return { product_id: (document.getElementById('tg_prod')||{}).value||null,
+    salary:Number((document.getElementById('tg_salary')||{}).value)||0,
+    fixed:Number((document.getElementById('tg_fixed')||{}).value)||0,
+    profit:Number((document.getElementById('tg_profit')||{}).value)||0,
+    fc:Number((document.getElementById('tg_fc')||{}).value)||35 };
+}
+function tgtPreview(){ if(window.__tgt){ window.__tgt.cfg=tgtReadCfg(); tgtRender(); } }
+function tgtRender(){
+  var d=window.__tgt||{}; var cfg=d.cfg||{}; var prods=d.prods||[];
+  var eff={ product_id:cfg.product_id||(prods[0]&&prods[0].id)||null,
+    salary:cfg.salary!=null?cfg.salary:15000, fixed:cfg.fixed!=null?cfg.fixed:2000,
+    profit:cfg.profit||0, fc:cfg.fc!=null?cfg.fc:35 };
+  var opts=prods.map(function(p){ return '<option value="'+p.id+'"'+(eff.product_id===p.id?' selected':'')+'>'+esc(p.name)+(Number(p.sell_price)>0?' — ฿'+fmtMoney0(p.sell_price):' — ยังไม่ตั้งราคา')+'</option>'; }).join('');
+  var h='<div class="card"><b>🎯 ตั้งค่าเป้าหมาย</b>'
+    +'<div class="help" style="margin:4px 0 6px">แนวคิด "กิจการต้องเลี้ยงเจ้าของได้" — รวมค่าแรงของเราเป็นต้นทุนคงที่ของร้าน แยกกระเป๋าร้านกับกระเป๋าส่วนตัว</div>'
+    +'<label>สินค้าอ้างอิง (แปลงเป้าเป็นจำนวนชิ้น/กล่อง)</label><select id="tg_prod" onchange="tgtPreview()">'+opts+'</select>'
+    +'<div class="grid2"><div><label>ค่าแรงเจ้าของ (บาท/เดือน)</label><input type="number" inputmode="decimal" id="tg_salary" value="'+eff.salary+'" onchange="tgtPreview()"></div>'
+    +'<div><label>ค่าคงที่อื่น น้ำ/ไฟ/เช่า (บาท/เดือน)</label><input type="number" inputmode="decimal" id="tg_fixed" value="'+eff.fixed+'" onchange="tgtPreview()"></div></div>'
+    +'<div class="grid2"><div><label>กำไรที่อยากได้เพิ่ม (บาท/เดือน)</label><input type="number" inputmode="decimal" id="tg_profit" value="'+eff.profit+'" onchange="tgtPreview()"></div>'
+    +'<div><label>% ต้นทุนสำรอง (ถ้าไม่มีสูตร)</label><input type="number" inputmode="decimal" id="tg_fc" value="'+eff.fc+'" onchange="tgtPreview()"></div></div>'
+    +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="saveTarget()">💾 บันทึกเป้าหมาย</button></div>';
+  var p=null; prods.forEach(function(x){ if(x.id===eff.product_id) p=x; });
+  if(p){
+    var r=tgtCalcFor(p, eff, d.items||[], d.ings||{});
+    if(!r){ h+='<div class="card"><div class="help">⚠️ '+esc(p.name)+' ยังไม่ตั้งราคาขาย — ใส่ราคาขายก่อนที่ อื่น ๆ → สินค้าและสูตร แล้วกลับมาหน้านี้ใหม่</div></div>'; }
+    else if(r.be==null){ h+='<div class="card"><span class="badge b-err">ราคาขาย ฿'+fmtMoney(r.sp)+' ต่ำกว่าต้นทุน ฿'+fmtMoney(r.cost)+' — ขายกี่ชิ้นก็ไม่ถึงจุดคุ้มทุน ต้องขึ้นราคาหรือลดต้นทุน</span></div>'; }
+    else {
+      var t=todayISO(); var yy=Number(t.slice(0,4)), mm=Number(t.slice(5,7)), dd=Number(t.slice(8,10));
+      var dim=new Date(yy, mm, 0).getDate(); var daysLeft=Math.max(1, dim-dd+1);
+      var rev=d.rev||0; var unitsEq=Math.floor(rev/r.sp); var pct=Math.min(100, Math.round(rev/r.beRev*100));
+      var remainRev=Math.max(0, r.beRev-rev); var remainU=Math.ceil(remainRev/r.sp);
+      var perDay=Math.ceil(r.be/dim); var perDayLeft=Math.ceil(remainU/daysLeft);
+      h+='<div class="card"><b>📐 จุดคุ้มทุนของเดือน — อิง '+esc(p.name)+'</b>'
+        +'<table class="rep" style="margin-top:6px">'
+        +trRow('ราคาขาย/หน่วย','฿'+fmtMoney(r.sp))
+        +trRow('ต้นทุน/หน่วย'+(r.fromRecipe?' (จากสูตรจริง)':' (ประมาณ '+eff.fc+'%)'),'฿'+fmtMoney(r.cost))
+        +trRow('กำไรส่วนเกิน/หน่วย','฿'+fmtMoney(r.contr))
+        +trRow('ต้นทุนคงที่รวม/เดือน','฿'+fmtMoney0(r.F)+' (ค่าแรง+ค่าคงที่+กำไรที่หวัง)')
+        +'</table>'
+        +'<div class="stat" style="margin-top:8px"><div class="lbl">ต้องขายให้ได้</div><div class="val">'+fmtMoney0(r.be)+' หน่วย/เดือน</div><div class="help">≈ ฿'+fmtMoney0(r.beRev)+' หรือเฉลี่ยวันละ '+perDay+' หน่วย</div></div></div>';
+      h+='<div class="card"><b>🏃 สถานะเดือนนี้</b>'
+        +'<div class="help" style="margin:4px 0">นับจากรายรับรวมทั้งร้านเดือนนี้ เทียบเป็นจำนวน '+esc(p.name)+'</div>'
+        +'<div style="background:#e8ece9;border-radius:8px;height:12px;overflow:hidden;margin:8px 0"><div style="height:12px;border-radius:8px;background:'+(pct>=100?'var(--green)':'#e8a23d')+';width:'+pct+'%"></div></div>'
+        +'<div class="row"><b>'+pct+'%</b><span class="spacer"></span><span class="help">฿'+fmtMoney0(rev)+' / ฿'+fmtMoney0(r.beRev)+'</span></div>'
+        +'<table class="rep" style="margin-top:6px">'
+        +trRow('ขายแล้ว (เทียบเท่า)', fmtMoney0(unitsEq)+' หน่วย')
+        +(rev>=r.beRev? trRow('สถานะ','✅ ถึงจุดคุ้มทุนแล้ว! ส่วนเกิน ฿'+fmtMoney0(rev-r.beRev)+' คือกำไรจริงของร้าน')
+          : trRow('เหลืออีก', fmtMoney0(remainU)+' หน่วย (฿'+fmtMoney0(remainRev)+')')
+           +trRow('เวลาที่เหลือ', daysLeft+' วัน → ต้องขายวันละ ~'+perDayLeft+' หน่วย'))
+        +'</table></div>';
+    }
+  }
+  var rowsC=''; prods.forEach(function(x){
+    if(!(Number(x.sell_price)>0)) return;
+    var rc=tgtCalcFor(x, eff, d.items||[], d.ings||{}); if(!rc) return;
+    rowsC+='<tr><td>'+esc(x.name)+'</td><td style="text-align:right">฿'+fmtMoney(x.sell_price)+'</td><td style="text-align:right">฿'+fmtMoney(rc.contr)+'</td><td style="text-align:right"><b>'+(rc.be==null?'—':fmtMoney0(rc.be))+'</b></td></tr>';
+  });
+  if(rowsC) h+='<div class="card"><b>⚖️ เทียบทุกสินค้า — ถ้าขายอย่างเดียว ต้องขายกี่หน่วย/เดือน</b><table class="rep" style="margin-top:6px"><tr><th style="text-align:left">สินค้า</th><th style="text-align:right">ราคา</th><th style="text-align:right">กำไร/หน่วย</th><th style="text-align:right">คุ้มทุนที่</th></tr>'+rowsC+'</table></div>';
+  V(h);
+}
+function saveTarget(){
+  var cfg=tgtReadCfg();
+  api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'target',value:cfg,updated_at:new Date().toISOString()}})
+  .then(function(){ if(window.__tgt) window.__tgt.cfg=cfg; audit('update','settings','target',cfg); toast('บันทึกเป้าหมายแล้ว ✓'); tgtRender(); })
+  .catch(function(){ toast('บันทึกไม่สำเร็จ ลองอีกครั้ง'); });
+}
+function homeTarget(rev){
+  api('settings?select=value&key=eq.target').then(function(rows){
+    var cfg=rows&&rows[0]&&rows[0].value; if(!cfg||!cfg.product_id) return;
+    Promise.all([
+      api('products?select=*&id=eq.'+cfg.product_id),
+      api('recipe_items?select=*&product_id=eq.'+cfg.product_id),
+      api('ingredients?select=id,cost_per_use_unit&limit=500')
+    ]).then(function(res){
+      var p=res[0]&&res[0][0]; if(!p) return;
+      var ings={}; (res[2]||[]).forEach(function(i){ ings[i.id]=i; });
+      var r=tgtCalcFor(p, cfg, res[1]||[], ings); if(!r||r.be==null) return;
+      var pct=Math.min(100, Math.round(rev/r.beRev*100));
+      var el=document.getElementById('tgtHome'); if(!el) return;
+      el.innerHTML='<div class="card" onclick="nav(\'#/target\')" style="cursor:pointer"><div class="row"><b>🎯 เป้าคุ้มทุนเดือนนี้</b><span class="spacer"></span><span class="help">'+esc(p.name)+' ›</span></div>'
+        +'<div style="background:#e8ece9;border-radius:8px;height:10px;overflow:hidden;margin:8px 0"><div style="height:10px;border-radius:8px;background:'+(pct>=100?'var(--green)':'#e8a23d')+';width:'+pct+'%"></div></div>'
+        +'<div class="row"><b>'+pct+'%</b><span class="spacer"></span><span class="help">฿'+fmtMoney0(rev)+' / ฿'+fmtMoney0(r.beRev)+' ('+fmtMoney0(r.be)+' หน่วย)</span></div></div>';
+    }).catch(function(){});
+  }).catch(function(){});
 }
 
 boot();
