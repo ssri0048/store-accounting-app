@@ -287,7 +287,7 @@ routes.home = function(){
     var warn = [];
     if(res[3]>0) warn.push('<div class="menu-item" onclick="goPending()" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">🕐</span> รายการรอตรวจสอบ <span class="badge b-warn" style="margin-left:6px">'+res[3]+'</span><span class="arr">›</span></div>');
     if(res[2]>0) warn.push('<div class="menu-item" onclick="nav(\'#/docs\')" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">⚠️</span> เอกสาร OCR ไม่สำเร็จ <span class="badge b-err" style="margin-left:6px">'+res[2]+'</span><span class="arr">›</span></div>');
-    if(noDoc>0) warn.push('<div class="menu-item" onclick="nav(\'#/check\')" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span><span class="arr">›</span></div>');
+    if(noDoc>0) warn.push('<div class="menu-item" onclick="goNodoc()" style="border:none;padding:8px 0;cursor:pointer"><span class="mi">📎</span> รายจ่ายเดือนนี้ที่ไม่มีหลักฐานแนบ <span class="badge b-mut" style="margin-left:6px">'+noDoc+'</span><span class="arr">›</span></div>');
     if(warn.length) h += '<div class="card"><b>งานที่ต้องทำต่อ</b>'+warn.join('')+'</div>';
     var pMap={}; (res[5]||[]).forEach(function(i){ pMap[i.id]=i; });
     var seenP={}, priceUps=[];
@@ -311,10 +311,11 @@ routes.home = function(){
 function txnItem(r){
   var isIn = (r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in');
   var st = r.review_status==='pending' ? '<span class="badge b-warn">รอตรวจ</span>' : '';
+  var nb = (r.document_id===null && (r.txn_type==='expense'||r.txn_type==='purchase')) ? ' <span class="badge b-warn">🧾 ไม่มีบิล</span>' : '';
   return '<div class="item" onclick="openTxn(\''+r.id+'\')">'
     + '<div class="ic '+(isIn?'ic-in':'ic-ex')+'">'+(isIn?'💰':'🧾')+'</div>'
     + '<div class="main"><div class="t1">'+esc(r.party_name||r.category_name||r.description||'-')+'</div>'
-    + '<div class="t2">'+fmtDate(r.txn_date)+' · '+esc(r.category_name||'')+' '+st+'</div></div>'
+    + '<div class="t2">'+fmtDate(r.txn_date)+' · '+esc(r.category_name||'')+' '+st+nb+'</div></div>'
     + '<div class="amt '+(isIn?'pos':'neg')+'">'+(isIn?'+':'−')+'฿'+fmtMoney0(r.amount)+'</div></div>';
 }
 
@@ -329,6 +330,7 @@ routes.list = function(){
         return '<button class="chip '+(f.type===tp?'on':'')+'" onclick="setListType(\''+tp+'\')">'+names[tp]+'</button>';
       }).join('')
     + '<button class="chip '+(f.pending?'on':'')+'" onclick="togglePending()">🕐 รอตรวจ</button>'
+    + '<button class="chip '+(f.nodoc?'on':'')+'" onclick="toggleNodoc()">🧾 ไม่มีบิล</button>'
     + '</div>'
     + '<div class="grid2 no-print" style="margin-bottom:10px">'
     + '<div><label style="margin-top:0">จากวันที่</label><input type="date" id="fFrom" value="'+esc(f.from)+'"></div>'
@@ -346,6 +348,7 @@ function loadList(){
   var f=S.lastList, q='transactions?select=*&order=txn_date.desc,created_at.desc&limit=200';
   if(f.type) q+='&txn_type=eq.'+f.type;
   if(f.pending) q+='&review_status=eq.pending';
+  if(f.nodoc) q+='&document_id=is.null&txn_type=in.(expense,purchase)';
   if(f.from) q+='&txn_date=gte.'+f.from;
   if(f.to) q+='&txn_date=lte.'+f.to;
   if(f.q){ var s=encodeURIComponent('%'+f.q+'%'); q+='&or=(party_name.ilike.'+s+',category_name.ilike.'+s+',description.ilike.'+s+',doc_no.ilike.'+s+',note.ilike.'+s+')'; }
@@ -2029,6 +2032,9 @@ function certGen(btn){
     openTxn(tid);
   }).catch(function(e){ btn.disabled=false; btn.textContent='✓ สร้างและแนบ'; toast('ไม่สำเร็จ: '+(e&&e.message||'ลองอีกครั้ง')); });
 }
+
+function toggleNodoc(){ S.lastList.nodoc=!S.lastList.nodoc; routes.list(); }
+function goNodoc(){ S.lastList.q=''; S.lastList.type=''; S.lastList.from=''; S.lastList.to=''; S.lastList.pending=false; S.lastList.nodoc=true; if(location.hash==='#/list'){ routes.list(); } else { nav('#/list'); } }
 
 boot();
 render();
