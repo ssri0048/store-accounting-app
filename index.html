@@ -749,11 +749,13 @@ function saveIng(id){
     buy_unit:gv('ig_buy')||null, use_unit:gv('ig_use')||null, conversion:conv,
     last_price:price, cost_per_use_unit: price!=null? +(price/conv).toFixed(4):null,
     source:gv('ig_src')||null, updated_at:new Date().toISOString() };
-  var req = id? api('ingredients?id=eq.'+id,{method:'PATCH',body:body,prefer:'return=representation'})
-              : api('ingredients',{method:'POST',body:body,prefer:'return=representation'});
-  req.then(function(rows){
+  ensureSupplier(body.source).then(function(sid){
+    if(sid) body.supplier_id=sid;
+    return id? api('ingredients?id=eq.'+id,{method:'PATCH',body:body,prefer:'return=representation'})
+             : api('ingredients',{method:'POST',body:body,prefer:'return=representation'});
+  }).then(function(rows){
     var rid = rows&&rows[0]&&rows[0].id;
-    if(!id && price!=null) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:body.buy_unit,supplier_name:body.source,purchase_date:todayISO()}}).catch(function(){});
+    if(!id && price!=null) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:body.buy_unit,supplier_name:body.source,supplier_id:body.supplier_id||null,purchase_date:todayISO()}}).catch(function(){});
     audit(id?'update':'create','ingredient',rid,{name:name});
     closeSheet(); toast('บันทึกวัตถุดิบแล้ว ✓'); render();
   }).catch(function(e){ toast('บันทึกไม่สำเร็จ: '+e.message.slice(0,60)); });
@@ -798,8 +800,11 @@ function priceForm(id, unit, conv){
 function savePrice(id, conv){
   var p=parseFloat(document.getElementById('pf_price').value); if(!p){ toast('กรอกราคา'); return; }
   var sup=document.getElementById('pf_sup').value.trim(), dt=document.getElementById('pf_date').value||todayISO();
-  api('ingredient_prices',{method:'POST',body:{ingredient_id:id,price:p,supplier_name:sup||null,purchase_date:dt}})
-  .then(function(){ return api('ingredients?id=eq.'+id,{method:'PATCH',body:{last_price:p,cost_per_use_unit:+(p/(conv||1)).toFixed(4),last_purchase_date:dt,updated_at:new Date().toISOString()}}); })
+  ensureSupplier(sup).then(function(sid){
+    var pb={ingredient_id:id,price:p,supplier_name:sup||null,purchase_date:dt}; if(sid) pb.supplier_id=sid;
+    var ib={last_price:p,cost_per_use_unit:+(p/(conv||1)).toFixed(4),last_purchase_date:dt,updated_at:new Date().toISOString()}; if(sid){ ib.supplier_id=sid; ib.source=sup; }
+    return api('ingredient_prices',{method:'POST',body:pb}).then(function(){ return api('ingredients?id=eq.'+id,{method:'PATCH',body:ib}); });
+  })
   .then(function(){ audit('price','ingredient',id,{price:p}); closeSheet(); toast('บันทึกราคาแล้ว — ต้นทุนสูตรอัปเดตอัตโนมัติ'); render(); })
   .catch(function(e){ toast('บันทึกไม่สำเร็จ'); });
 }
@@ -1437,7 +1442,10 @@ function aiConfirmIng(btn){
   btn.disabled=true;
   var conv=Number(g.units_per_pack)||1;
   var price=(g.pack_price!=null)? Number(g.pack_price) : null;
-  api('ingredients',{method:'POST',prefer:'return=representation',body:{
+  ensureSupplier(g.source).then(function(sid){
+  window.__aiSid=sid;
+  return api('ingredients',{method:'POST',prefer:'return=representation',body:{
+    supplier_id:sid,
     name_th:g.name_th||'วัตถุดิบใหม่',
     buy_unit:g.buy_unit||null, use_unit:g.use_unit||null,
     conversion:conv, pack_size:conv,
@@ -1445,9 +1453,9 @@ function aiConfirmIng(btn){
     cost_per_use_unit: price!=null? +(price/conv).toFixed(4):null,
     source:g.source||null,
     last_purchase_date: price!=null? todayISO():null
-  }}).then(function(rows){
+  }}); }).then(function(rows){
     var rid=rows&&rows[0]&&rows[0].id;
-    if(price!=null && rid) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:g.buy_unit||null,supplier_name:g.source||null,purchase_date:todayISO()}}).catch(function(){});
+    if(price!=null && rid) api('ingredient_prices',{method:'POST',body:{ingredient_id:rid,price:price,unit:g.buy_unit||null,supplier_name:g.source||null,supplier_id:window.__aiSid||null,purchase_date:todayISO()}}).catch(function(){});
     audit('create','ingredient',rid,{via:'ai',name:g.name_th});
     window.__aiIng=null;
     aiPush('<div class="badge b-ok" style="margin:6px 0">✅ เพิ่มวัตถุดิบแล้ว — ดูได้ที่ อื่น ๆ → วัตถุดิบ และนำไปใส่สูตรสินค้าได้เลย</div>');
@@ -1484,6 +1492,21 @@ function supDelete(id){
       audit('deactivate','supplier',id,{}); closeSheet(); toast('Supplier นี้ถูกอ้างอิงในข้อมูลอื่นอยู่ — ปิดใช้งานแทน (หายจากรายการแล้ว)'); render();
     }).catch(function(){ toast('ลบไม่สำเร็จ'); });
   });
+}
+
+/* ================== AUTO SUPPLIER LINK ================== */
+function ensureSupplier(name){
+  name=(name||'').trim();
+  if(!name) return Promise.resolve(null);
+  return api('suppliers?select=id&name=eq.'+encodeURIComponent(name)+'&limit=1').then(function(rows){
+    if(rows && rows[0]) return rows[0].id;
+    return api('suppliers',{method:'POST',prefer:'return=representation',body:{name:name,notes:'สร้างอัตโนมัติจากแหล่งซื้อวัตถุดิบ'}}).then(function(r){
+      var sid=r&&r[0]&&r[0].id;
+      audit('create','supplier',sid,{via:'auto',name:name});
+      toast('เพิ่ม "'+name+'" เข้ารายชื่อ Supplier ให้อัตโนมัติแล้ว');
+      return sid;
+    });
+  }).catch(function(){ return null; });
 }
 
 boot();
