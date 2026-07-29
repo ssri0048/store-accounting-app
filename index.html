@@ -337,7 +337,7 @@ routes.list = function(){
   var f = S.lastList;
   var h = '<div class="searchbar"><input id="q" placeholder="🔍 ค้นหา ร้าน / หมวด / รายละเอียด" value="'+esc(f.q)+'"></div>'
     + '<div class="chips no-print" style="margin-bottom:10px">'
-    + ['','income','expense','purchase','sale'].map(function(tp){
+    + ['','income','expense','sale'].map(function(tp){
         var names={'':'ทั้งหมด',income:'รายรับ',expense:'รายจ่าย',purchase:'ซื้อวัตถุดิบ',sale:'ยอดขาย'};
         return '<button class="chip '+(f.type===tp?'on':'')+'" onclick="setListType(\''+tp+'\')">'+names[tp]+'</button>';
       }).join('')
@@ -358,7 +358,7 @@ function setListType(tp){ S.lastList.type=tp; routes.list(); }
 function debounce(fn,ms){ var t; return function(){ var a=arguments,c=this; clearTimeout(t); t=setTimeout(function(){fn.apply(c,a);},ms); }; }
 function loadList(){
   var f=S.lastList, q='transactions?select=*&order=txn_date.desc,created_at.desc&limit=200';
-  if(f.type) q+='&txn_type=eq.'+f.type;
+  if(f.type) q+=(f.type==='expense'?'&txn_type=in.(expense,purchase)':'&txn_type=eq.'+f.type);
   if(f.pending) q+='&review_status=eq.pending';
   if(f.nodoc) q+='&document_id=is.null&txn_type=in.(expense,purchase)';
   if(f.from) q+='&txn_date=gte.'+f.from;
@@ -434,7 +434,7 @@ routes.add = function(args){
   }
 };
 function renderAddForm(d){
-  var types=[['income','💰 รายรับ'],['expense','🧾 รายจ่าย'],['purchase','🥬 ซื้อวัตถุดิบ'],['sale','🛍 ยอดขาย'],['transfer_in','↘️ เงินโอนเข้า'],['transfer_out','↗️ เงินโอนออก']];
+  if(d.txn_type==='purchase')d.txn_type='expense'; var types=[['income','💰 รายรับ'],['expense','🧾 รายจ่าย/ซื้อของ'],['sale','🛍 ยอดขาย'],['transfer_in','↘️ เงินโอนเข้า'],['transfer_out','↗️ เงินโอนออก']];
   var isIn = (d.txn_type==='income'||d.txn_type==='sale'||d.txn_type==='transfer_in');
   var cats = S.cats.filter(function(c){ return c.kind === (isIn?'income':'expense'); });
   var h = '<div class="card"><label style="margin-top:0">ประเภทรายการ <span class="req">*</span></label><div class="chips">'
@@ -1842,12 +1842,20 @@ function rdSheet(){
   api('settings?select=value&key=eq.taxinfo').then(function(rows){
     var t=(rows&&rows[0]&&rows[0].value)||{};
     var m=todayISO().slice(0,7);
-    sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>🧾 รายงานเงินสดรับ-จ่าย (แบบสรรพากร)</h3>'
-      +'<div class="help">ตามประกาศอธิบดีกรมสรรพากรฯ (ฉบับที่ 161) สำหรับบุคคลธรรมดาที่ไม่ได้จด VAT — จัดทำเป็นรายเดือน ระบบสรุปยอดขายเป็นรายวันให้อัตโนมัติ</div>'
+    window.__rdOpt={type:'xlsx',dl:true,dr:true,scope:'month'};
+    sheet('<button class="closex" onclick="closeSheet()">✕</button><h3>🧾 รายงานเงินสดรับ-จ่าย (แบบยื่นสรรพากร)</h3>'
+      +'<div class="help">ตามแบบแนบท้ายประกาศอธิบดีกรมสรรพากรฯ (ฉบับที่ 161) สำหรับบุคคลธรรมดาที่ไม่ได้จด VAT — ระบบสรุปยอดขายเป็นรายวันให้อัตโนมัติ</div>'
       +'<label>ชื่อผู้ประกอบการ (ตามบัตรประชาชน)</label><input id="rd_owner" value="'+esc(t.owner||'')+'" placeholder="เช่น นางสาวศศิ ใจดี">'
-      +'<label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน 13 หลัก</label><input id="rd_taxid" inputmode="numeric" value="'+esc(t.tax_id||'')+'">'
+      +'<div class="grid2"><div><label>เลขประจำตัวประชาชน</label><input id="rd_cid" inputmode="numeric" value="'+esc(t.cid||'')+'"></div>'
+      +'<div><label>เลขประจำตัวผู้เสียภาษี</label><input id="rd_taxid" inputmode="numeric" value="'+esc(t.tax_id||t.cid||'')+'"></div></div>'
+      +'<div class="help">บุคคลธรรมดาส่วนใหญ่ใช้เลข 13 หลักเดียวกันทั้งสองช่อง</div>'
       +'<label>ชื่อสถานประกอบการ</label><input id="rd_shop" value="'+esc(t.shop||S.store.name||'')+'">'
-      +'<label>เดือนที่ต้องการ</label><input type="month" id="rd_month" value="'+m+'">'
+      +'<label>เดือน / ปีที่ต้องการ</label><input type="month" id="rd_month" value="'+m+'">'
+      +'<label style="margin-top:12px">ช่วงเวลาของรายงาน</label><div class="chips" id="rdScopes" style="margin-top:6px">'
+      +'<button class="chip on" data-s="month" onclick="rdScope(this)">เฉพาะเดือนนี้</button>'
+      +'<button class="chip" data-s="h1" onclick="rdScope(this)">ครึ่งปีแรก (ภ.ง.ด.94)</button>'
+      +'<button class="chip" data-s="year" onclick="rdScope(this)">ทั้งปี (ภ.ง.ด.90)</button></div>'
+      +'<div class="help">ครึ่งปีแรก/ทั้งปี = ใช้ปีจากเดือนที่เลือกด้านบน · เลือกแบบนี้จะได้ยอดรวมพร้อมกรอกแบบยื่นภาษีเลย</div>'
       +'<label style="margin-top:12px">Step 1 — เลือกรูปแบบเอกสาร</label><div class="chips" id="rdTypes" style="margin-top:6px">'
       +'<button class="chip on" data-t="xlsx" onclick="rdPick(this)">📗 Excel</button>'
       +'<button class="chip" data-t="print" onclick="rdPick(this)">🖨 พิมพ์ / PDF</button></div>'
@@ -1856,23 +1864,39 @@ function rdSheet(){
       +'<button class="chip on" onclick="rdTgl(this,\'dr\')">☁️ ซิงก์เข้า Drive</button></div>'
       +'<div class="help" style="margin-top:8px">ไฟล์ใน Drive เก็บแยกที่ Store Accounting/09_Exports/<b>รายงานสรรพากร</b></div>'
       +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="rdRun(this)">✓ ตกลง</button>');
-    window.__rdOpt={type:'xlsx',dl:true,dr:true};
   }).catch(function(){ toast('โหลดการตั้งค่าไม่สำเร็จ'); });
+}
+function rdScope(el){ var b=document.getElementById('rdScopes'); if(b){ Array.prototype.forEach.call(b.children,function(c){ c.classList.remove('on'); }); } el.classList.add('on'); if(window.__rdOpt) window.__rdOpt.scope=el.getAttribute('data-s'); }
+function rdYearTh(y){ return (S.prefs.year_format==='ce')? y : y+543; }
+function rdMonthTh(m){
+  var TH=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  return TH[Number(m.slice(5,7))-1]+' '+rdYearTh(Number(m.slice(0,4)));
 }
 function rdGen(mode){
   var t={ owner:document.getElementById('rd_owner').value.trim(),
+    cid:document.getElementById('rd_cid').value.trim(),
     tax_id:document.getElementById('rd_taxid').value.trim(),
     shop:document.getElementById('rd_shop').value.trim() };
   var m=document.getElementById('rd_month').value; if(!m){ toast('เลือกเดือนก่อน'); return; }
   api('settings?on_conflict=key',{method:'POST',prefer:'resolution=merge-duplicates',body:{key:'taxinfo',value:t,updated_at:new Date().toISOString()}}).catch(function(){});
-  var w=null; if(mode==='print' && (window.__rdOpt||{dl:true}).dl){ w=window.open('','_blank'); }
-  var from=m+'-01';
+  var o=window.__rdOpt||{}; var scope=o.scope||'month';
   var y=Number(m.slice(0,4)), mo=Number(m.slice(5,7));
-  var last=new Date(y, mo, 0).getDate();
-  var to=m+'-'+('0'+last).slice(-2);
-  api('transactions?select=*&txn_date=gte.'+from+'&txn_date=lte.'+to+'&order=txn_date&limit=3000').then(function(rows){
+  var from,to,periodLabel,tag,formName;
+  if(scope==='h1'){
+    from=y+'-01-01'; to=y+'-06-30';
+    periodLabel='มกราคม – มิถุนายน '+rdYearTh(y); tag=y+'-H1'; formName='ภ.ง.ด.94 (ครึ่งปีแรก)';
+  } else if(scope==='year'){
+    from=y+'-01-01'; to=y+'-12-31';
+    periodLabel='มกราคม – ธันวาคม '+rdYearTh(y); tag=String(y); formName='ภ.ง.ด.90 (ทั้งปี)';
+  } else {
+    var last=new Date(y, mo, 0).getDate();
+    from=m+'-01'; to=m+'-'+('0'+last).slice(-2);
+    periodLabel=rdMonthTh(m); tag=m; formName='';
+  }
+  var w=null; if(mode==='print' && (o.dl!==false)){ w=window.open('','_blank'); }
+  api('transactions?select=*&txn_date=gte.'+from+'&txn_date=lte.'+to+'&order=txn_date&limit=6000').then(function(rows){
     rows=rows||[];
-    var incMap={}, lines=[], personal=0, skipped=0;
+    var incMap={}, lines=[], personal=0, skipped=0, chan={}, noDoc=0;
     rows.forEach(function(r){
       var a=Number(r.amount)||0; if(!a) return;
       var tp=r.txn_type;
@@ -1881,13 +1905,15 @@ function rdGen(mode){
         var k=r.txn_date+'|'+(r.category_name||'ขายสินค้า');
         var e=incMap[k]||(incMap[k]={date:r.txn_date, cat:(r.category_name||'ขายสินค้า'), total:0, pay:{}});
         e.total+=a; var p=payName(r.payment_method)||'ไม่ระบุ'; e.pay[p]=(e.pay[p]||0)+a;
+        var ck=r.category_name||'อื่น ๆ'; chan[ck]=(chan[ck]||0)+a;
         return;
       }
       if((r.category_name||'')==='รายจ่ายส่วนตัว'){ personal+=a; return; }
       var isPur = tp==='purchase' || RD_PURCHASE_CATS[r.category_name||''];
       var name = (tp==='refund'?'คืนเงินลูกค้า — ':'')+(r.category_name||'ค่าใช้จ่าย')+(r.party_name?' — '+r.party_name:'');
+      if(!r.document_id) noDoc++;
       lines.push({date:r.txn_date, name:name, inc:0, pur:(isPur&&tp!=='refund')?a:0, oth:(!isPur||tp==='refund')?a:0,
-        note:(payName(r.payment_method)||'')+(r.document_id?' · มีหลักฐาน':' · ไม่มีบิล')});
+        note:(r.doc_no?'เลขที่ '+r.doc_no+' · ':'')+(payName(r.payment_method)||'')+(r.document_id?' · มีหลักฐาน':' · ไม่มีบิล')});
     });
     Object.keys(incMap).forEach(function(k){
       var e=incMap[k];
@@ -1897,57 +1923,109 @@ function rdGen(mode){
     lines.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:(b.inc-a.inc)); });
     var ti=0,tp2=0,to2=0;
     lines.forEach(function(l){ ti+=l.inc; tp2+=l.pur; to2+=l.oth; });
-    if(mode==='xlsx'){ rdXlsx(t,m,lines,ti,tp2,to2,personal,skipped); }
-    else { rdPrint(w,t,m,lines,ti,tp2,to2,personal,skipped); }
-    audit('export','report',null,{type:'rd-cash-report',month:m});
+    var S2={ti:ti, pur:tp2, oth:to2, expTotal:tp2+to2, profit:ti-tp2-to2,
+      net60:+(ti*0.4).toFixed(2), netAct:+(ti-tp2-to2).toFixed(2),
+      expPct: ti>0? +(((tp2+to2)/ti)*100).toFixed(1) : 0,
+      personal:personal, skipped:skipped, noDoc:noDoc, chan:chan,
+      periodLabel:periodLabel, formName:formName, scope:scope, from:from, to:to, tag:tag};
+    S2.better = (S2.netAct < S2.net60) ? 'หักตามจริง' : 'หักเหมา 60%';
+    if(mode==='xlsx'){ rdXlsx(t,lines,S2); } else { rdPrint(w,t,lines,S2); }
+    audit('export','report',null,{type:'rd-cash-report',scope:scope,from:from,to:to});
   }).catch(function(e){ if(w) w.close(); toast('สร้างรายงานไม่สำเร็จ ลองอีกครั้ง'); });
 }
-function rdMonthTh(m){
-  var TH=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-  var y=Number(m.slice(0,4)); var yy=(S.prefs.year_format==='ce')? y : y+543;
-  return TH[Number(m.slice(5,7))-1]+' '+yy;
+function rdNotes(s){
+  var n=[];
+  if(s.personal>0) n.push('เงินถอนใช้ส่วนตัว (ไม่ใช่รายจ่ายกิจการ ไม่รวมในยอดข้างต้น): '+fmtMoney(s.personal)+' บาท');
+  if(s.skipped>0) n.push('รายการเงินโอนเข้า-ออก/ปรับยอด '+s.skipped+' รายการ ไม่ถูกนับ (ไม่ใช่รายได้/รายจ่ายกิจการ)');
+  if(s.noDoc>0) n.push('รายจ่ายที่ยังไม่มีหลักฐานแนบ '+s.noDoc+' รายการ — ควรทำใบรับรองแทนใบเสร็จให้ครบก่อนยื่น');
+  if(s.ti>1800000) n.push('⚠️ รายรับในช่วงนี้เกิน 1.8 ล้านบาท — เข้าเกณฑ์ต้องจดทะเบียนภาษีมูลค่าเพิ่ม (VAT) ควรปรึกษานักบัญชีทันที');
+  else if(s.scope!=='month' && s.ti>1500000) n.push('รายรับใกล้เกณฑ์ 1.8 ล้านบาท/ปี ที่ต้องจด VAT — เริ่มวางแผนล่วงหน้าได้');
+  n.push('เงินได้จากการขายสินค้า/อาหาร = เงินได้พึงประเมินประเภทที่ 8 มาตรา 40(8)');
+  n.push('เลือกหักค่าใช้จ่ายได้ 2 แบบ: เหมา 60% (ไม่ต้องใช้หลักฐาน) หรือตามจริง (ต้องมีหลักฐานครบทุกรายการ) — ระบบคำนวณเทียบให้แล้วด้านบน');
+  n.push('เก็บใบเสร็จ/สลิปโอน/หลักฐานประกอบทุกรายการไว้อย่างน้อย 5 ปี');
+  n.push('ภ.ง.ด.94 = เงินได้ ม.ค.–มิ.ย. ยื่น ก.ค.–ก.ย. · ภ.ง.ด.90 = ทั้งปี ยื่น ม.ค.–มี.ค. ปีถัดไป (ยื่นออนไลน์ที่ efiling.rd.go.th)');
+  n.push('เอกสารนี้จัดทำจากข้อมูลที่บันทึกในระบบ ใช้ประกอบการยื่นภาษี ไม่ใช่คำแนะนำทางภาษี ควรให้นักบัญชีตรวจก่อนยื่นจริง');
+  return n;
 }
-function rdXlsx(t,m,lines,ti,tp,to,personal,skipped){
+function rdXlsx(t,lines,s){
   try{
-    var aoa=[ ['รายงานเงินสดรับ-จ่าย'], ['ชื่อผู้ประกอบการ', t.owner||'-'], ['เลขประจำตัวผู้เสียภาษี', t.tax_id||'-'], ['ชื่อสถานประกอบการ', t.shop||'-'], ['เดือน', rdMonthTh(m)], [],
+    var aoa=[ ['รายงานเงินสดรับ-จ่าย'],
+      ['ชื่อผู้ประกอบการ', t.owner||'-', '', 'เลขประจำตัวประชาชน', t.cid||'-'],
+      ['ชื่อสถานประกอบการ', t.shop||'-', '', 'เลขประจำตัวผู้เสียภาษีอากร', t.tax_id||'-'],
+      ['ช่วงเวลา', s.periodLabel + (s.formName? '  (สำหรับ '+s.formName+')':'')], [],
       ['วัน เดือน ปี','รายการ','รายรับ','รายจ่าย: ซื้อสินค้า','รายจ่าย: ค่าใช้จ่ายอื่น ๆ','หมายเหตุ'] ];
     lines.forEach(function(l){ aoa.push([fmtDate(l.date), l.name, l.inc||'', l.pur||'', l.oth||'', l.note||'']); });
-    aoa.push(['','รวมทั้งเดือน', ti, tp, to, '']);
-    aoa.push(['','รายรับสุทธิหักรายจ่าย (เบื้องต้น)', ti-tp-to, '', '', '']);
+    aoa.push(['','รวมทั้งช่วงเวลา', s.ti, s.pur, s.oth, '']);
     aoa.push([]);
-    if(personal>0) aoa.push(['หมายเหตุ','เงินถอนใช้ส่วนตัว (ไม่ใช่รายจ่ายกิจการ ไม่รวมในยอดข้างต้น): '+fmtMoney(personal)+' บาท']);
-    if(skipped>0) aoa.push(['หมายเหตุ','รายการเงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการ ไม่ถูกนับ (ไม่ใช่รายได้/รายจ่ายกิจการ)']);
-    aoa.push(['หมายเหตุ','เก็บใบเสร็จ/สลิปโอน/หลักฐานประกอบทุกรายการไว้อย่างน้อย 5 ปี']);
-    aoa.push(['หมายเหตุ','ยอดรวมรายเดือนใช้ประกอบการยื่น ภ.ง.ด.94 (ยื่น ก.ค.-ก.ย. สำหรับเงินได้ ม.ค.-มิ.ย.) และ ภ.ง.ด.90 (ยื่น ม.ค.-มี.ค. ปีถัดไป)']);
+    aoa.push(['สรุปสำหรับยื่นภาษี'+(s.formName? ' — '+s.formName : '')]);
+    aoa.push(['รายรับรวม (เงินได้พึงประเมิน)', s.ti]);
+    aoa.push(['รายจ่าย: ซื้อสินค้า', s.pur]);
+    aoa.push(['รายจ่าย: ค่าใช้จ่ายอื่น ๆ', s.oth]);
+    aoa.push(['รวมรายจ่าย', s.expTotal, '', 'คิดเป็น % ของรายรับ', s.expPct+'%']);
+    aoa.push(['กำไรเบื้องต้น (รายรับ − รายจ่าย)', s.profit]);
+    aoa.push([]);
+    aoa.push(['เปรียบเทียบวิธีหักค่าใช้จ่าย','เงินได้หลังหักค่าใช้จ่าย','หมายเหตุ']);
+    aoa.push(['แบบเหมา 60%', s.net60, 'ไม่ต้องใช้หลักฐานรายจ่าย']);
+    aoa.push(['แบบตามจริง', s.netAct, 'ต้องมีหลักฐานครบทุกรายการ']);
+    aoa.push(['แบบที่เสียภาษีน้อยกว่า', s.better, 'ตัวเลขยิ่งน้อยยิ่งเสียภาษีน้อย (ยังไม่รวมค่าลดหย่อนส่วนตัว)']);
+    aoa.push([]);
+    rdNotes(s).forEach(function(x){ aoa.push(['หมายเหตุ', x]); });
+    aoa.push([]);
+    aoa.push(['','','ลงชื่อ ................................................ ผู้จัดทำ/ผู้ประกอบการ']);
+    aoa.push(['','','( '+(t.owner||'')+' )   วันที่จัดทำ '+fmtDate(todayISO())]);
     var wb=XLSX.utils.book_new(); var ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols']=[{wch:14},{wch:46},{wch:12},{wch:15},{wch:17},{wch:30}];
+    ws['!cols']=[{wch:14},{wch:46},{wch:14},{wch:16},{wch:18},{wch:34}];
     XLSX.utils.book_append_sheet(wb, ws, 'เงินสดรับ-จ่าย');
+    var fn='รายงานเงินสดรับจ่าย_'+s.tag+'.xlsx';
     var o=window.__rdOpt||{dl:true,dr:false};
-    if(o.dl){ XLSX.writeFile(wb, 'รายงานเงินสดรับจ่าย_'+m+'.xlsx'); toast('ดาวน์โหลด Excel แล้ว'); }
-    if(o.dr) driveUp('รายงานเงินสดรับจ่าย_'+m+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}),'รายงานสรรพากร');
+    if(o.dl){ XLSX.writeFile(wb, fn); toast('ดาวน์โหลด Excel แล้ว'); }
+    if(o.dr) driveUp(fn,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', XLSX.write(wb,{bookType:'xlsx',type:'base64'}),'รายงานสรรพากร');
   }catch(e){ toast('Export ไม่สำเร็จ: '+e.message); }
 }
-function rdPrint(w,t,m,lines,ti,tp,to,personal,skipped){
-  var rowsH=lines.map(function(l){ return '<tr><td>'+esc(fmtDate(l.date))+'</td><td>'+esc(l.name)+'</td><td class="n">'+(l.inc?fmtMoney(l.inc):'')+'</td><td class="n">'+(l.pur?fmtMoney(l.pur):'')+'</td><td class="n">'+(l.oth?fmtMoney(l.oth):'')+'</td><td>'+esc(l.note||'')+'</td></tr>'; }).join('');
-  var html='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>รายงานเงินสดรับ-จ่าย '+esc(m)+'</title><style>body{font-family:-apple-system,sans-serif;font-size:13px;margin:24px}h2{text-align:center;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #333;padding:4px 6px;vertical-align:top}th{background:#f0f0f0}.n{text-align:right;white-space:nowrap}.hd{margin:2px 0}.tot td{font-weight:bold;background:#f5f5dc}</style></head><body>'
+function rdPrint(w,t,lines,s){
+  var rowsH=lines.map(function(l){ return '<tr><td>'+esc(fmtDate(l.date))+'</td><td>'+esc(l.name)+'</td><td class="n">'+(l.inc?fmtMoney(l.inc):'')+'</td><td class="n">'+(l.pur?fmtMoney(l.pur):'')+'</td><td class="n">'+(l.oth?fmtMoney(l.oth):'')+'</td><td class="s">'+esc(l.note||'')+'</td></tr>'; }).join('');
+  var notesH=rdNotes(s).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('');
+  var chanH=Object.keys(s.chan).sort().map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="n">'+fmtMoney(s.chan[k])+'</td></tr>'; }).join('');
+  var html='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>รายงานเงินสดรับ-จ่าย '+esc(s.tag)+'</title><style>'
+    +'body{font-family:-apple-system,"Noto Sans Thai",sans-serif;font-size:12.5px;margin:22px;color:#111}'
+    +'h2{text-align:center;margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:8px}'
+    +'th,td{border:1px solid #444;padding:4px 6px;vertical-align:top}th{background:#eee}'
+    +'.n{text-align:right;white-space:nowrap}.s{font-size:11px}.hd{margin:2px 0}'
+    +'.tot td{font-weight:bold;background:#f3f3e8}.sum{width:auto;min-width:60%;margin-top:12px}'
+    +'.sum td{border:none;padding:2px 8px}.sum td.n{border-bottom:1px solid #999}'
+    +'ul{font-size:11px;color:#444;padding-left:16px}.sign{margin-top:26px;text-align:right;font-size:12px;line-height:2}'
+    +'@media print{tr{page-break-inside:avoid}}</style></head><body>'
     +'<h2>รายงานเงินสดรับ-จ่าย</h2>'
-    +'<div class="hd">ชื่อผู้ประกอบการ: '+esc(t.owner||'-')+' &nbsp;&nbsp; เลขประจำตัวผู้เสียภาษี: '+esc(t.tax_id||'-')+'</div>'
-    +'<div class="hd">ชื่อสถานประกอบการ: '+esc(t.shop||'-')+' &nbsp;&nbsp; เดือน: '+esc(rdMonthTh(m))+'</div>'
-    +'<table><tr><th style="width:88px">วัน เดือน ปี</th><th>รายการ</th><th style="width:78px">รายรับ</th><th style="width:88px">รายจ่าย:<br>ซื้อสินค้า</th><th style="width:95px">รายจ่าย:<br>ค่าใช้จ่ายอื่น ๆ</th><th style="width:140px">หมายเหตุ</th></tr>'
+    +'<div class="hd">ชื่อผู้ประกอบการ: <b>'+esc(t.owner||'-')+'</b> &nbsp;&nbsp; เลขประจำตัวประชาชน: '+esc(t.cid||'-')+'</div>'
+    +'<div class="hd">ชื่อสถานประกอบการ: <b>'+esc(t.shop||'-')+'</b> &nbsp;&nbsp; เลขประจำตัวผู้เสียภาษีอากร: '+esc(t.tax_id||'-')+'</div>'
+    +'<div class="hd">ช่วงเวลา: <b>'+esc(s.periodLabel)+'</b>'+(s.formName? ' &nbsp;·&nbsp; สำหรับยื่น <b>'+esc(s.formName)+'</b>':'')+'</div>'
+    +'<table><tr><th style="width:86px">วัน เดือน ปี</th><th>รายการ</th><th style="width:76px">รายรับ</th><th style="width:84px">รายจ่าย:<br>ซื้อสินค้า</th><th style="width:92px">รายจ่าย:<br>ค่าใช้จ่ายอื่น ๆ</th><th style="width:150px">หมายเหตุ</th></tr>'
     +rowsH
-    +'<tr class="tot"><td></td><td>รวมทั้งเดือน</td><td class="n">'+fmtMoney(ti)+'</td><td class="n">'+fmtMoney(tp)+'</td><td class="n">'+fmtMoney(to)+'</td><td></td></tr>'
+    +'<tr class="tot"><td></td><td>รวมทั้งช่วงเวลา</td><td class="n">'+fmtMoney(s.ti)+'</td><td class="n">'+fmtMoney(s.pur)+'</td><td class="n">'+fmtMoney(s.oth)+'</td><td></td></tr>'
     +'</table>'
-    +'<p>รายรับสุทธิหักรายจ่าย (เบื้องต้น): <b>'+fmtMoney(ti-tp-to)+' บาท</b>'+(personal>0?' · เงินถอนใช้ส่วนตัว (ไม่รวมข้างต้น): '+fmtMoney(personal)+' บาท':'')+'</p>'
-    +'<p style="font-size:11px;color:#555">จัดทำตามประกาศอธิบดีกรมสรรพากรเกี่ยวกับภาษีเงินได้ (ฉบับที่ 161) · เก็บหลักฐานประกอบทุกรายการอย่างน้อย 5 ปี · ใช้ประกอบการยื่น ภ.ง.ด.94 / ภ.ง.ด.90'+(skipped>0?' · เงินโอนเข้า-ออก/ปรับยอด '+skipped+' รายการไม่ถูกนับ':'')+'</p>'
+    +'<h3 style="margin:16px 0 0">สรุปสำหรับยื่นภาษี'+(s.formName? ' — '+esc(s.formName):'')+'</h3>'
+    +'<table class="sum">'
+    +'<tr><td>รายรับรวม (เงินได้พึงประเมิน)</td><td class="n">'+fmtMoney(s.ti)+'</td></tr>'
+    +'<tr><td>รายจ่าย: ซื้อสินค้า</td><td class="n">'+fmtMoney(s.pur)+'</td></tr>'
+    +'<tr><td>รายจ่าย: ค่าใช้จ่ายอื่น ๆ</td><td class="n">'+fmtMoney(s.oth)+'</td></tr>'
+    +'<tr><td>รวมรายจ่าย ('+s.expPct+'% ของรายรับ)</td><td class="n">'+fmtMoney(s.expTotal)+'</td></tr>'
+    +'<tr><td><b>กำไรเบื้องต้น</b></td><td class="n"><b>'+fmtMoney(s.profit)+'</b></td></tr>'
+    +'</table>'
+    +'<table style="margin-top:10px"><tr><th>วิธีหักค่าใช้จ่าย</th><th style="width:130px">เงินได้หลังหักค่าใช้จ่าย</th><th>หมายเหตุ</th></tr>'
+    +'<tr><td>แบบเหมา 60%</td><td class="n">'+fmtMoney(s.net60)+'</td><td class="s">ไม่ต้องใช้หลักฐานรายจ่าย</td></tr>'
+    +'<tr><td>แบบตามจริง</td><td class="n">'+fmtMoney(s.netAct)+'</td><td class="s">ต้องมีหลักฐานครบทุกรายการ</td></tr>'
+    +'<tr class="tot"><td>แบบที่เสียภาษีน้อยกว่า</td><td class="n">'+esc(s.better)+'</td><td class="s">ยังไม่รวมค่าลดหย่อนส่วนตัว</td></tr></table>'
+    +(chanH? '<h3 style="margin:16px 0 0">รายรับแยกตามช่องทาง (ไว้กระทบยอดกับเงินเข้าบัญชี)</h3><table class="sum">'+chanH+'</table>':'')
+    +'<ul>'+notesH+'</ul>'
+    +'<div class="sign">ลงชื่อ ................................................ ผู้จัดทำ/ผู้ประกอบการ<br>( '+esc(t.owner||'')+' )<br>วันที่จัดทำ '+esc(fmtDate(todayISO()))+'</div>'
     +'<scr'+'ipt>window.print()</scr'+'ipt></body></html>';
   var o=window.__rdOpt||{dl:true,dr:false};
   if(o.dl){
     if(w && w.document){ w.document.write(html); w.document.close(); }
-    else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='รายงานเงินสดรับจ่าย_'+m+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
+    else { var b=new Blob([html],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='รายงานเงินสดรับจ่าย_'+s.tag+'.html'; a.click(); toast('เปิดป๊อปอัปไม่ได้ — ดาวน์โหลดเป็นไฟล์แทน เปิดไฟล์แล้วสั่งพิมพ์ได้'); }
   } else if(w){ w.close(); }
-  if(o.dr) driveUp('รายงานเงินสดรับจ่าย_'+m+'.html','text/html', btoa(unescape(encodeURIComponent(html))),'รายงานสรรพากร');
+  if(o.dr) driveUp('รายงานเงินสดรับจ่าย_'+s.tag+'.html','text/html', btoa(unescape(encodeURIComponent(html))),'รายงานสรรพากร');
 }
-
 /* ================== CERT: ใบรับรองแทนใบเสร็จรับเงิน ================== */
 function thaiNum(num){
   var t=['','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
