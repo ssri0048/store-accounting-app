@@ -264,6 +264,7 @@ routes.home = function(){
   setTop(S.store.name || 'บัญชีร้าน');
   V('<div class="skel"></div><div class="skel"></div><div class="skel"></div>');
   var t = todayISO(), m = monthStartISO();
+  S.homePeriod = { mode: 'month', value: m.slice(0,7) };
   Promise.all([
     api('transactions?select=txn_type,amount,txn_date,review_status,document_id&txn_date=gte.'+m+'&order=txn_date.desc&limit=1000'),
     api('transactions?select=id,txn_type,amount,txn_date,party_name,category_name,description,review_status&order=created_at.desc&limit=5'),
@@ -287,9 +288,10 @@ routes.home = function(){
       + '<div class="stat"><div class="lbl">✨ กำไรวันนี้ (ประมาณ)</div><div class="val '+(ti-te>=0?'pos':'neg')+'">฿'+fmtMoney0(ti-te)+'</div></div>'
       + '<div class="stat"><div class="lbl">📈 กำไรเดือนนี้ (ประมาณ)</div><div class="val '+(mi-me>=0?'pos':'neg')+'">฿'+fmtMoney0(mi-me)+'</div></div>'
       + '</div>';
-    h += '<div class="card"><div class="row" style="margin-bottom:4px"><b>📅 เดือนนี้</b><span class="spacer"></span><span class="help">'+fmtDate(m)+' – '+fmtDate(t)+'</span></div>'
-      + '<div class="grid2"><div><div class="help">รายรับ</div><b class="pos">฿'+fmtMoney0(mi)+'</b></div>'
-      + '<div><div class="help">รายจ่าย</div><b class="neg">฿'+fmtMoney0(me)+'</b></div></div></div>';
+    h += '<div class="card"><div class="row" style="margin-bottom:4px"><b id="periodTitle">📅 เดือนนี้</b><span class="spacer"></span></div>'
+      + '<div class="row no-print" style="gap:6px;margin-bottom:10px;flex-wrap:wrap"><button class="chip on" id="periodModeMonth" onclick="setPeriodMode(\'month\')">รายเดือน</button><button class="chip" id="periodModeDay" onclick="setPeriodMode(\'day\')">รายวัน</button><input type="month" id="periodInput" value="'+m.slice(0,7)+'" onchange="onPeriodInputChange(this.value)" style="margin-left:auto;max-width:150px"></div>'
+      + '<div id="periodCardBody"><div class="grid2"><div><div class="help">รายรับ</div><b class="pos">฿'+fmtMoney0(mi)+'</b></div>'
+      + '<div><div class="help">รายจ่าย</div><b class="neg">฿'+fmtMoney0(me)+'</b></div></div></div></div>';
     h += '<div id="tgtHome"></div>';
     setTimeout(function(){ homeTarget(mi); }, 80);
     h += '<div class="card"><b>เพิ่มรายการด่วน</b><div class="grid2" style="margin-top:10px">'
@@ -320,6 +322,59 @@ routes.home = function(){
     V('<div class="card"><b>ยังโหลดข้อมูลไม่ได้</b><div class="help" style="margin:8px 0">'+esc(e.message)+'</div><button class="btn btn-p" onclick="render()">ลองอีกครั้ง</button></div>');
   });
 };
+function periodRangeFromState(){
+  var p = S.homePeriod || {mode:'month', value: monthStartISO().slice(0,7)};
+  if(p.mode==='day'){
+    var from = p.value;
+    var d = new Date(p.value+'T00:00:00');
+    var nd = new Date(d.getTime()+86400000);
+    var to = nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
+    return {from:from, to:to, label: fmtDate(from)};
+  }
+  var ym = p.value.split('-'); var y=Number(ym[0]), mo=Number(ym[1]);
+  var from = ym[0]+'-'+ym[1]+'-01';
+  var nmo = mo===12?1:mo+1, ny = mo===12?y+1:y;
+  var to = ny+'-'+String(nmo).padStart(2,'0')+'-01';
+  var yLabel = S.prefs.year_format==='be' ? y+543 : y;
+  return {from:from, to:to, label:'เดือน '+ym[1]+'/'+yLabel};
+}
+function setPeriodMode(mode){
+  S.homePeriod = S.homePeriod || {};
+  S.homePeriod.mode = mode;
+  S.homePeriod.value = mode==='day' ? todayISO() : monthStartISO().slice(0,7);
+  var bm = document.getElementById('periodModeMonth'), bd = document.getElementById('periodModeDay');
+  if(bm) bm.classList.toggle('on', mode==='month');
+  if(bd) bd.classList.toggle('on', mode==='day');
+  var inp = document.getElementById('periodInput');
+  if(inp){ inp.type = mode==='day' ? 'date' : 'month'; inp.value = S.homePeriod.value; }
+  loadPeriodCard();
+}
+function onPeriodInputChange(val){
+  if(!val) return;
+  S.homePeriod = S.homePeriod || {mode:'month'};
+  S.homePeriod.value = val;
+  loadPeriodCard();
+}
+function loadPeriodCard(){
+  var body = document.getElementById('periodCardBody');
+  var titleEl = document.getElementById('periodTitle');
+  if(!body) return;
+  var r = periodRangeFromState();
+  if(titleEl) titleEl.textContent = '📅 '+r.label;
+  body.innerHTML = '<div class="skel"></div>';
+  api('transactions?select=txn_type,amount&txn_date=gte.'+r.from+'&txn_date=lt.'+r.to+'&limit=5000').then(function(rows){
+    var pi=0, pe=0;
+    (rows||[]).forEach(function(x){
+      var isIncome = (x.txn_type==='income'||x.txn_type==='sale'||x.txn_type==='transfer_in');
+      var a = Number(x.amount)||0;
+      if(isIncome) pi+=a; else pe+=a;
+    });
+    body.innerHTML = '<div class="grid2"><div><div class="help">รายรับ</div><b class="pos">฿'+fmtMoney0(pi)+'</b></div>'
+      + '<div><div class="help">รายจ่าย</div><b class="neg">฿'+fmtMoney0(pe)+'</b></div></div>';
+  }).catch(function(){
+    body.innerHTML = '<div class="help">โหลดข้อมูลช่วงนี้ไม่ได้</div>';
+  });
+}
 function txnItem(r){
   var isIn = (r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in');
   var st = r.review_status==='pending' ? '<span class="badge b-warn">รอตรวจ</span>' : '';
