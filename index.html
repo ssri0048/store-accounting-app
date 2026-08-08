@@ -2307,17 +2307,17 @@ function driveUp(name,mime,b64,sub){
 }
 
 /* ================== POS FRONT-OF-HOUSE ================== */
-var POS = { channels:[], categories:[], items:[], prices:{}, cart:[], channelId:null, cat:'all', paper:'80mm', loaded:false };
+var POS = { channels:[], categories:[], items:[], prices:{}, cart:[], channelId:null, cat:'all', paper:'80mm', fontSize:12, loaded:false };
 var POS_PAPER_W = {'80mm':220,'58mm':170,'A5':260,'A4':290};
 var POS_HIST_Q=''; var POS_HIST_F='all'; var POS_MG_CAT=null;
 
 function posShowNav(){
   var navEl=document.querySelector('nav.nav'); if(!navEl) return;
   navEl.innerHTML =
-    '<a href="#/pos" data-nav="pos"><span class="nic">🧾</span>หน้าหลัก</a>'
-    +'<a href="#/pos/bill" data-nav="posbill"><span class="nic">🧺</span>เปิดบิล</a>'
+    '<a href="#/pos" data-nav="pos"><span class="nic">🏠</span>หน้าหลัก</a>'
+    +'<a href="#/pos/bill" data-nav="posbill"><span class="nic">🧾</span>เปิดบิล</a>'
     +'<a href="#/pos/history" data-nav="poshistory"><span class="nic">🕘</span>ประวัติ</a>'
-    +'<a href="#/pos/menu" data-nav="posmenu"><span class="nic">▤</span>เมนู</a>'
+    +'<a href="#/pos/menu" data-nav="posmenu"><span class="nic">📋</span>เมนู</a>'
     +'<a href="#/pos/settings" data-nav="possettings"><span class="nic">⚙</span>ตั้งค่า</a>';
 }
 function posSetNavOn(key){
@@ -2382,8 +2382,8 @@ function posRenderHome(){
   var n = POS.cart.reduce(function(a,c){return a+c.qty;},0);
   var sub = POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var fabTxt = n? ('บิลนี้ · '+n+' รายการ · '+fmtMoney0(sub)) : 'บิลว่าง · แตะเมนูเพื่อเริ่ม';
-  V(chH + catH + grid + '<div style="height:74px"></div>'
-    + '<button class="btn btn-p btn-block" style="position:fixed;left:14px;right:14px;bottom:78px;max-width:730px;margin:0 auto" onclick="nav(\'/pos/bill\')">🧾 '+esc(fabTxt)+'</button>');
+  V(chH + catH + grid + '<div style="height:80px"></div>'
+    + '<button class="btn btn-p btn-block" style="position:fixed;left:14px;right:14px;bottom:calc(var(--nav-h) + 14px + env(safe-area-inset-bottom));max-width:730px;margin:0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="nav(\'/pos/bill\')">🧾 '+esc(fabTxt)+'</button>');
   posSetNavOn('pos');
 }
 function posSetChannel(id){ POS.channelId=id; posRenderHome(); }
@@ -2396,7 +2396,7 @@ function posAdd(id){
 }
 
 function posRenderBill(){
-  setTop('เปิดบิล', true, '<button class="btn-t" style="color:#fff" onclick="posClearBill()">🗑</button>');
+  setTop('เปิดบิล', true, '<button style="background:none;border:none;color:#fff;font-size:22px;padding:4px 0 4px 8px;cursor:pointer" onclick="posClearBill()">🗑</button>');
   var rows = POS.cart.map(function(c){
     return '<div class="item"><div class="main"><div class="t1">'+esc(c.name)+'</div><div class="t2">'+fmtMoney(c.price)+' / หน่วย</div></div>'
       + '<div class="row" style="gap:6px"><button class="btn-t" onclick="posQty(\''+c.menuId+'\',-1)">−</button><b>'+c.qty+'</b><button class="btn-t" onclick="posQty(\''+c.menuId+'\',1)">+</button></div>'
@@ -2430,6 +2430,7 @@ function posRenderPreview(){
   var pchips = Object.keys(POS_PAPER_W).map(function(p){ return '<button class="chip '+(POS.paper===p?'on':'')+'" onclick="posSetPaper(\''+p+'\')">'+p+'</button>'; }).join('');
   var cashOn = !!(S.pos_shop && S.pos_shop.cash_enabled);
   V('<div class="chips">'+pchips+'</div>'
+    +'<div class="row" style="gap:10px;margin-top:6px;align-items:center"><span class="help" style="white-space:nowrap;margin:0">ขนาดตัวอักษร</span><input type="range" min="10" max="18" step="1" value="'+(POS.fontSize||12)+'" oninput="posSetFontSize(this.value)" style="flex:1"><span id="posFontSizeLabel" class="help" style="width:36px;text-align:right;margin:0">'+(POS.fontSize||12)+'px</span></div>'
     +'<label>ชื่อลูกค้า (ไม่บังคับ)</label><input id="posCust" value="'+esc(POS.custName)+'" oninput="posField(\'custName\',this.value)">'
     +'<label>ข้อความท้ายบิล</label><input id="posComment" value="'+esc(POS.comment)+'" oninput="posField(\'comment\',this.value)">'
     + (cashOn? '<div class="grid2"><div><label>รับเงินมา</label><input type="number" id="posCash" oninput="posCashInput(this.value)"></div><div><label>เงินทอน</label><input id="posChange" disabled></div></div>' : '')
@@ -2441,6 +2442,7 @@ function posRenderPreview(){
 }
 function posField(k,v){ POS[k]=v; posDrawReceipt(); }
 function posSetPaper(p){ POS.paper=p; posRenderPreview(); }
+function posSetFontSize(v){ POS.fontSize=Number(v)||12; var l=document.getElementById('posFontSizeLabel'); if(l) l.textContent=POS.fontSize+'px'; posDrawReceipt(); }
 function posCashInput(v){
   var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var recv=Number(v)||0; POS.cashReceived=recv;
@@ -2451,8 +2453,8 @@ function posDrawReceipt(){
   var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
   var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
-  box.innerHTML = '<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
-    +'<div style="text-align:center;font-weight:700">'+esc(S.store.name||'ร้านค้า')+'</div>'
+  box.innerHTML = '<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+    +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
     +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr>'
     +'<div class="row" style="justify-content:space-between"><span>บิล #ใหม่</span><span>'+esc(ch?ch.name:'')+'</span></div>'
     +(POS.custName? '<div>ลูกค้า: '+esc(POS.custName)+'</div>':'')
@@ -2558,7 +2560,7 @@ function posRenderHistoryDetail(id){
     var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('');
     V('<div style="display:flex;justify-content:center;padding:14px 0;background:#e9ebee;border-radius:var(--radius)">'
       +'<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;width:220px">'
-      +'<div style="text-align:center;font-weight:700">'+esc(S.store.name||'ร้านค้า')+'</div><hr>'
+      +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr>'
       +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
       +(b.customer_name? '<div>ลูกค้า: '+esc(b.customer_name)+'</div>':'')
       +'<hr>'+itemsHtml+'<hr><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
@@ -2585,9 +2587,13 @@ function posRenderMenu(){
   if(POS_MG_CAT===null && POS.categories[0]) POS_MG_CAT=POS.categories[0].id;
   var chips = POS.categories.map(function(c){ return '<button class="chip '+(POS_MG_CAT===c.id?'on':'')+'" onclick="posMgCat(\''+c.id+'\')">'+esc(c.name)+'</button>'; }).join('')
     + '<button class="chip" onclick="posAddCategoryPrompt()">+ หมวดหมู่</button>';
-  V('<div class="chips">'+chips+'</div><div id="posMgList"></div>'
+  var curCat = POS.categories.find(function(x){return x.id===POS_MG_CAT;});
+  var catEdit = curCat? '<div class="help" style="cursor:pointer;margin:-4px 0 10px" onclick="posRenameCategory(\''+curCat.id+'\')">✎ แก้ไขชื่อหมวดหมู่นี้</div>' : '';
+  var chanRows = POS.channels.map(function(c){ return '<div class="row" style="padding:4px 0"><span class="spacer">'+esc(c.name)+'</span><button class="btn-t" onclick="posRenameChannel(\''+c.id+'\')">✎</button></div>'; }).join('');
+  V('<div class="chips">'+chips+'</div>'+catEdit+'<div id="posMgList"></div>'
     +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="posMenuModal(null)">+ เพิ่มเมนูใหม่</button>'
-    +'<button class="btn btn-t btn-block" style="margin-top:8px;border:1px dashed var(--line)" onclick="posAddChannelPrompt()">+ เพิ่มช่องทางขาย</button>');
+    +'<div class="card" style="margin-top:12px"><label style="margin-top:0">ช่องทางขาย</label>'+chanRows
+    +'<button class="btn btn-t btn-block" style="margin-top:6px;border:1px dashed var(--line)" onclick="posAddChannelPrompt()">+ เพิ่มช่องทางขาย</button></div>');
   posMgRenderList();
   posSetNavOn('posmenu');
 }
@@ -2650,6 +2656,20 @@ function posAddChannelPrompt(){
     POS.loaded=false; posLoad().then(posRenderMenu); toast('เพิ่มช่องทางขายแล้ว ✓');
   }).catch(function(e){ toast('เพิ่มช่องทางไม่สำเร็จ: '+(e&&e.message||'')); });
 }
+function posRenameChannel(id){
+  var c = POS.channels.find(function(x){return x.id===id;}); if(!c) return;
+  var name = prompt('แก้ไขชื่อช่องทางขาย', c.name); if(!name || !name.trim()) return;
+  api('pos_channels?id=eq.'+id, {method:'PATCH', body:{name:name.trim()}}).then(function(){
+    POS.loaded=false; posLoad().then(posRenderMenu); toast('แก้ไขชื่อช่องทางขายแล้ว ✓');
+  }).catch(function(e){ toast('แก้ไขไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+function posRenameCategory(id){
+  var c = POS.categories.find(function(x){return x.id===id;}); if(!c) return;
+  var name = prompt('แก้ไขชื่อหมวดหมู่', c.name); if(!name || !name.trim()) return;
+  api('pos_categories?id=eq.'+id, {method:'PATCH', body:{name:name.trim()}}).then(function(){
+    POS.loaded=false; posLoad().then(posRenderMenu); toast('แก้ไขชื่อหมวดหมู่แล้ว ✓');
+  }).catch(function(e){ toast('แก้ไขไม่สำเร็จ: '+(e&&e.message||'')); });
+}
 
 function posRenderSettings(){
   setTop('ตั้งค่าร้าน (หน้าร้าน)', true);
@@ -2657,7 +2677,7 @@ function posRenderSettings(){
   V('<div class="card"><label>โลโก้ร้าน</label>'
     +(shop.logo_url? '<div><img src="'+shop.logo_url+'" style="width:64px;height:64px;object-fit:cover;border-radius:12px"></div>' : '<div class="help">ยังไม่มีโลโก้</div>')
     +'<input type="file" id="posLogoInput" accept="image/*" style="margin-top:8px">'
-    +'<label>ชื่อร้าน</label><input value="'+esc(S.store.name||'')+'" disabled>'
+    +'<label>ชื่อร้าน (แสดงบนใบเสร็จ)</label><input id="posShopName" value="'+esc(shop.name||S.store.name||'')+'" placeholder="ชื่อร้านของคุณ">'
     +'<label>ที่อยู่ใบเสร็จ</label><textarea id="posAddr" rows="2">'+esc(shop.address||'')+'</textarea>'
     +'<div class="grid2"><div><label>ขนาดกระดาษเริ่มต้น</label><select id="posPaperDef">'
     + Object.keys(POS_PAPER_W).map(function(p){ return '<option '+(shop.receipt_paper===p?'selected':'')+'>'+p+'</option>'; }).join('')
@@ -2671,6 +2691,7 @@ function posRenderSettings(){
 }
 function posSaveSettings(){
   var shop = Object.assign({}, S.pos_shop||{}, {
+    name: document.getElementById('posShopName').value.trim(),
     address: document.getElementById('posAddr').value.trim(),
     receipt_paper: document.getElementById('posPaperDef').value
   });
