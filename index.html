@@ -1390,7 +1390,10 @@ function gate(){
   S.system = sys;
   var authOk = localStorage.getItem('sa_auth_ok')==='1';
   if(authOk && S.user){
-    if(sys==='pos'){ location.hash='/pos'; render(); }
+    var seg0 = (location.hash.replace('#','').split('/').filter(Boolean))[0];
+    if(sys==='pos' && seg0!=='pos'){ location.hash='/pos'; }
+    else if(sys!=='pos' && seg0==='pos'){ location.hash='/home'; }
+    render();
     return;
   }
   if(authOk){ gateUsers(); return; }
@@ -1468,7 +1471,10 @@ function gatePick(n){
   var bg=document.getElementById('gateBg'); if(bg) bg.remove();
   audit('login','user',null,{name:n, system:S.system||'backoffice'});
   toast('สวัสดี '+n+' 👋');
-  if(S.system==='pos'){ location.hash='/pos'; render(); } else { render(); }
+  var seg0 = (location.hash.replace('#','').split('/').filter(Boolean))[0];
+  if(S.system==='pos'){ if(seg0!=='pos') location.hash='/pos'; }
+  else if(seg0==='pos'){ location.hash='/home'; }
+  render();
 }
 function logout(){
   localStorage.removeItem('sa_auth_ok');
