@@ -2473,31 +2473,31 @@ function posDrawReceipt(){
   if(POS_HIST_BILL){ posDrawReceiptFromBill(box); return; }
   var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
-  var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
+  var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px dotted #ddd"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
   box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
-    +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:72px;height:72px;object-fit:cover;border-radius:8px"></div>' : '')
+    +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
-    +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr>'
+    +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
     +'<div class="row" style="justify-content:space-between"><span>บิล #ใหม่</span><span>'+esc(ch?ch.name:'')+'</span></div>'
     +(POS.custName? '<div>ลูกค้า: '+esc(POS.custName)+'</div>':'')
-    +'<hr>'+itemsHtml+'<hr>'
-    +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr>'
+    +'<hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'+itemsHtml+'<hr style="border:none;border-top:2px solid #333;margin:8px 0 4px">'
+    +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
     +'<div style="text-align:center;font-size:.9em">'+esc(POS.comment||'')+'</div>'
     +'</div>';
 }
 function posDrawReceiptFromBill(box){
   var b = POS_HIST_BILL.bill, items = POS_HIST_BILL.items;
-  var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
+  var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px dotted #ddd"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
   box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
-    +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:72px;height:72px;object-fit:cover;border-radius:8px"></div>' : '')
-    +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr>'
+    +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
+    +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
     +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
     +(b.customer_name? '<div>ลูกค้า: '+esc(b.customer_name)+'</div>':'')
-    +'<hr>'+itemsHtml+'<hr><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
+    +'<hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'+itemsHtml+'<hr style="border:none;border-top:2px solid #333;margin:8px 0 4px"><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
     +(b.cash_received!=null? '<div class="row" style="justify-content:space-between"><span>รับเงินมา</span><span>'+fmtMoney(b.cash_received)+'</span></div><div class="row" style="justify-content:space-between"><span>เงินทอน</span><span>'+fmtMoney(b.change_due)+'</span></div>':'')
-    +'<hr><div style="text-align:center;font-size:.9em">'+esc(b.comment||'')+'</div>'
+    +'<hr style="border:none;border-top:1px dashed #bbb;margin:8px 0"><div style="text-align:center;font-size:.9em">'+esc(b.comment||'')+'</div>'
     +'</div>';
 }
 function posOpenPrint(){
@@ -2513,11 +2513,12 @@ function posPrintReceipt(){
   var ifr = document.getElementById('posPrintFrame');
   if(!ifr){ ifr=document.createElement('iframe'); ifr.id='posPrintFrame'; ifr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'; document.body.appendChild(ifr); }
   var pageSize = ({'80mm':'80mm auto','58mm':'58mm auto','A5':'A5','A4':'A4'})[POS.paper] || 'A4';
-  var doc = ifr.contentWindow.document;
-  doc.open();
-  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ใบเสร็จ</title><style>@page{size:'+pageSize+';margin:3mm}body{margin:0;background:#fff}.receiptBox{width:100% !important;box-sizing:border-box}.row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap}.row>span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row>span:last-child{white-space:nowrap;flex-shrink:0}</style></head><body>'+box.innerHTML+'</body></html>');
-  doc.close();
-  setTimeout(function(){ ifr.contentWindow.focus(); ifr.contentWindow.print(); }, 250);
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>ใบเสร็จ</title><style>@page{size:'+pageSize+';margin:3mm}body{margin:0;background:#fff}.receiptBox{width:100% !important;box-sizing:border-box}.row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap}.row>span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row>span:last-child{white-space:nowrap;flex-shrink:0}</style></head><body>'+box.innerHTML+'</body></html>';
+  var blobUrl = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+  ifr.onload = function(){
+    setTimeout(function(){ ifr.contentWindow.focus(); ifr.contentWindow.print(); URL.revokeObjectURL(blobUrl); }, 150);
+  };
+  ifr.src = blobUrl;
 }
 function posCloseBill(){
   if(!POS.cart.length) return;
