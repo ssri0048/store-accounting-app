@@ -2327,7 +2327,7 @@ function driveUp(name,mime,b64,sub){
 /* ================== POS FRONT-OF-HOUSE ================== */
 var POS = { channels:[], categories:[], items:[], prices:{}, cart:[], channelId:null, cat:'all', paper:'80mm', fontSize:12, loaded:false };
 var POS_PAPER_W = {'80mm':220,'58mm':170,'A5':260,'A4':290};
-var POS_HIST_Q=''; var POS_HIST_F='all'; var POS_MG_CAT=null;
+var POS_HIST_Q=''; var POS_HIST_F='all'; var POS_MG_CAT=null; var POS_HIST_BILL=null;
 
 function posShowNav(){
   var navEl=document.querySelector('nav.nav'); if(!navEl) return;
@@ -2344,6 +2344,7 @@ function posSetNavOn(key){
 }
 routes.pos = function(seg){
   var sub = seg[0] || 'home';
+  if(sub!=='historydetail') POS_HIST_BILL=null;
   posShowNav();
   function go(){
     if(sub==='bill') posRenderBill();
@@ -2469,6 +2470,7 @@ function posCashInput(v){
 }
 function posDrawReceipt(){
   var box=document.getElementById('posReceipt'); if(!box) return;
+  if(POS_HIST_BILL){ posDrawReceiptFromBill(box); return; }
   var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
   var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
@@ -2482,6 +2484,20 @@ function posDrawReceipt(){
     +'<hr>'+itemsHtml+'<hr>'
     +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr>'
     +'<div style="text-align:center;font-size:.9em">'+esc(POS.comment||'')+'</div>'
+    +'</div>';
+}
+function posDrawReceiptFromBill(box){
+  var b = POS_HIST_BILL.bill, items = POS_HIST_BILL.items;
+  var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
+  var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
+  box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+    +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:52px;height:52px;object-fit:cover;border-radius:8px"></div>' : '')
+    +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr>'
+    +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
+    +(b.customer_name? '<div>ลูกค้า: '+esc(b.customer_name)+'</div>':'')
+    +'<hr>'+itemsHtml+'<hr><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
+    +(b.cash_received!=null? '<div class="row" style="justify-content:space-between"><span>รับเงินมา</span><span>'+fmtMoney(b.cash_received)+'</span></div><div class="row" style="justify-content:space-between"><span>เงินทอน</span><span>'+fmtMoney(b.change_due)+'</span></div>':'')
+    +'<hr><div style="text-align:center;font-size:.9em">'+esc(b.comment||'')+'</div>'
     +'</div>';
 }
 function posOpenPrint(){
@@ -2591,21 +2607,13 @@ function posRenderHistoryDetail(id){
   ]).then(function(res){
     var b=(res[0]||[])[0]; var items=res[1]||[];
     if(!b){ V('<div class="empty">ไม่พบบิล</div>'); return; }
-    var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('');
-    var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
-    V('<div id="posReceipt" style="display:flex;justify-content:center;padding:14px 0;background:#e9ebee;border-radius:var(--radius)">'
-      +'<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;width:220px">'
-      +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:52px;height:52px;object-fit:cover;border-radius:8px"></div>' : '')
-      +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr>'
-      +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
-      +(b.customer_name? '<div>ลูกค้า: '+esc(b.customer_name)+'</div>':'')
-      +'<hr>'+itemsHtml+'<hr><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
-      +(b.cash_received!=null? '<div class="row" style="justify-content:space-between"><span>รับเงินมา</span><span>'+fmtMoney(b.cash_received)+'</span></div><div class="row" style="justify-content:space-between"><span>เงินทอน</span><span>'+fmtMoney(b.change_due)+'</span></div>':'')
-      +'<hr><div style="text-align:center;font-size:.9em">'+esc(b.comment||'')+'</div></div></div>'
+    POS_HIST_BILL = {bill:b, items:items};
+    V('<div id="posReceipt" style="display:flex;justify-content:center;padding:14px 0;background:#e9ebee;border-radius:var(--radius)"></div>'
       +'<div style="padding:14px 0">'
       +'<button class="btn btn-s btn-block" onclick="posOpenPrint()">🖨 พิมพ์ / ส่งออก PDF</button>'
       +(b.status!=='void'? '<button class="btn btn-d btn-block" style="margin-top:8px" onclick="posVoidBill(\''+b.id+'\')">✕ ยกเลิกบิล (Void)</button>':'<div class="help" style="text-align:center;margin-top:8px">บิลนี้ถูกยกเลิกแล้ว</div>')
       +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="nav(\'/pos\')">กลับหน้าหลัก</button></div>');
+    posDrawReceipt();
   }).catch(function(){ V('<div class="empty">โหลดบิลไม่สำเร็จ</div>'); });
   posSetNavOn('poshistory');
 }
