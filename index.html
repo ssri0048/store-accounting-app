@@ -191,6 +191,7 @@ function audit(action, entity, entity_id, detail){
 
 /* ================== ROUTER ================== */
 var routes = {};
+var BO_NAV_HTML = (document.querySelector('nav.nav') ? document.querySelector('nav.nav').innerHTML : '');
 function nav(hash){ location.hash = hash; }
 window.addEventListener('hashchange', render);
 window.addEventListener('online', function(){ document.getElementById('offlineBar').style.display='none'; toast('กลับมาออนไลน์แล้ว ✓'); });
@@ -209,6 +210,11 @@ function render(){
   var h = location.hash.replace('#','') || '/home';
   var seg = h.split('/').filter(Boolean);
   var page = seg[0] || 'home';
+  var navEl = document.querySelector('nav.nav');
+  if(navEl && page!=='pos' && navEl.dataset.mode==='pos'){
+    navEl.innerHTML = BO_NAV_HTML;
+    navEl.dataset.mode = 'bo';
+  }
   document.querySelectorAll('.nav a').forEach(function(a){
     a.classList.toggle('on', a.dataset.nav===page);
   });
@@ -2331,6 +2337,7 @@ function posShowNav(){
     +'<a href="#/pos/history" data-nav="poshistory"><span class="nic">🕘</span>ประวัติ</a>'
     +'<a href="#/pos/menu" data-nav="posmenu"><span class="nic">📋</span>เมนู</a>'
     +'<a href="#/pos/settings" data-nav="possettings"><span class="nic">⚙</span>ตั้งค่า</a>';
+  navEl.dataset.mode = 'pos';
 }
 function posSetNavOn(key){
   document.querySelectorAll('nav.nav a').forEach(function(a){ a.classList.toggle('on', a.dataset.nav===key); });
