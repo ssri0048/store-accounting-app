@@ -240,6 +240,7 @@ function boot(){
       if(r.key==='store') S.store = Object.assign(S.store, r.value||{});
       if(r.key==='drive' && r.value && r.value.root_url) CFG.driveUrl = r.value.root_url;
       if(r.key==='auth') S.auth = r.value||{};
+      if(r.key==='pos_shop') S.pos_shop = r.value||{};
     });
     S.cats = res[1]||[];
     gate();
@@ -1379,26 +1380,50 @@ routes.check = function(){
 
 /* ================== LOGIN GATE ================== */
 function gate(){
-  if(localStorage.getItem('sa_auth_ok')==='1' && S.user){ return; }
+  var sys = localStorage.getItem('sa_system') || 'backoffice';
+  S.system = sys;
+  var authOk = localStorage.getItem('sa_auth_ok')==='1';
+  if(authOk && S.user){
+    if(sys==='pos'){ location.hash='/pos'; render(); }
+    return;
+  }
+  if(authOk){ gateUsers(); return; }
+  gateChooseSystem();
+}
+function gateChooseSystem(){
   var old=document.getElementById('gateBg'); if(old) old.remove();
   var bg=document.createElement('div'); bg.id='gateBg';
   bg.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
   bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center">'
-    +'<div style="font-size:44px">🔒</div><h2 style="margin:8px 0">'+esc(S.store.name||'บัญชีร้าน')+'</h2>'
-    +'<div class="help" style="margin-bottom:10px">ใส่รหัสผ่านร้านเพื่อเข้าใช้งาน</div>'
+    +'<div style="font-size:44px">฿</div><h2 style="margin:8px 0">'+esc(S.store.name||'ระบบร้าน')+'</h2>'
+    +'<div class="help" style="margin-bottom:14px">เลือกระบบที่ต้องการเข้าใช้งาน</div>'
+    +'<div style="text-align:left">'
+    +'<div class="card" style="cursor:pointer;margin-bottom:8px" onclick="gatePickSystem(\'pos\')"><div class="row"><span style="font-size:22px">🧾</span><div style="margin-left:10px;min-width:0"><b>ระบบหน้าร้าน (POS)</b><div class="help" style="margin:0">เปิดบิล เลือกเมนู พิมพ์ใบเสร็จ</div></div></div></div>'
+    +'<div class="card" style="cursor:pointer" onclick="gatePickSystem(\'backoffice\')"><div class="row"><span style="font-size:22px">📊</span><div style="margin-left:10px;min-width:0"><b>ระบบบัญชีหลังบ้าน</b><div class="help" style="margin:0">รายรับ-รายจ่าย ต้นทุน รายงาน</div></div></div></div>'
+    +'</div></div>';
+  document.body.appendChild(bg);
+}
+function gatePickSystem(sys){ S.system=sys; gatePin(); }
+function gatePin(){
+  var bg=document.getElementById('gateBg'); if(!bg) return;
+  var label = S.system==='pos' ? 'ระบบหน้าร้าน (POS)' : 'ระบบบัญชีหลังบ้าน';
+  bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center">'
+    +'<div style="font-size:44px">🔒</div><h2 style="margin:8px 0">'+esc(label)+'</h2>'
+    +'<div class="help" style="margin-bottom:10px">ใส่รหัสผ่านระบบเพื่อเข้าใช้งาน</div>'
     +'<input type="password" inputmode="numeric" id="gatePin" placeholder="รหัสผ่าน" style="text-align:center;font-size:22px;letter-spacing:6px">'
     +'<div id="gateErr" class="help" style="color:var(--red);margin-top:6px"></div>'
-    +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="gatePinOk()">เข้าสู่ระบบ</button></div>';
-  document.body.appendChild(bg);
+    +'<button class="btn btn-p btn-block" style="margin-top:12px" onclick="gatePinOk()">เข้าสู่ระบบ</button>'
+    +'<div class="help" style="margin-top:14px;cursor:pointer;text-decoration:underline" onclick="gateChooseSystem()">‹ กลับไปเลือกระบบ</div>'
+    +'</div>';
   var i=document.getElementById('gatePin');
-  if(i) i.addEventListener('keydown', function(e){ if(e.key==='Enter') gatePinOk(); });
-  if(localStorage.getItem('sa_auth_ok')==='1'){ gateUsers(); }
+  if(i){ i.focus(); i.addEventListener('keydown', function(e){ if(e.key==='Enter') gatePinOk(); }); }
 }
 function gatePinOk(){
   var v=(document.getElementById('gatePin')||{value:''}).value.trim();
-  var pin=(S.auth && S.auth.pin)? String(S.auth.pin) : '1234';
-  if(v!==pin){ var er=document.getElementById('gateErr'); if(er) er.textContent='รหัสไม่ถูกต้อง ลองอีกครั้ง'; return; }
+  var expected = S.system==='pos' ? ((S.auth && S.auth.pos_pin)? String(S.auth.pos_pin) : '1234') : ((S.auth && S.auth.pin)? String(S.auth.pin) : '1234');
+  if(v!==expected){ var er=document.getElementById('gateErr'); if(er) er.textContent='รหัสไม่ถูกต้อง ลองอีกครั้ง'; return; }
   localStorage.setItem('sa_auth_ok','1');
+  localStorage.setItem('sa_system', S.system);
   gateUsers();
 }
 function gateUsers(){
@@ -1410,7 +1435,9 @@ function gateUsers(){
     ((S.auth && S.auth.users)||[]).forEach(function(n){ names[n]=1; });
     if(S.user) names[S.user]=1;
     var list=Object.keys(names).sort();
+    var sysLabel = S.system==='pos' ? 'ระบบหน้าร้าน (POS)' : 'ระบบบัญชีหลังบ้าน';
     bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center">'
+      +'<div class="help" style="text-transform:uppercase;font-size:11px;letter-spacing:.04em;margin-bottom:2px">'+esc(sysLabel)+'</div>'
       +'<div style="font-size:44px">👤</div><h2 style="margin:8px 0">คุณคือใคร?</h2>'
       +'<div class="help" style="margin-bottom:10px">เลือกชื่อของคุณ (ใช้ระบุว่าใครเป็นคนบันทึก)</div>'
       +'<div class="chips" style="justify-content:center">'
@@ -1419,7 +1446,8 @@ function gateUsers(){
       +'<input id="gateNew" placeholder="หรือพิมพ์ชื่อใหม่" style="margin-top:12px;text-align:center">'
       +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="gatePick(document.getElementById(\'gateNew\').value.trim())">ใช้ชื่อนี้</button></div>';
   }).catch(function(){
-    bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center"><h2>คุณคือใคร?</h2>'
+    var sysLabel = S.system==='pos' ? 'ระบบหน้าร้าน (POS)' : 'ระบบบัญชีหลังบ้าน';
+    bg.innerHTML='<div style="max-width:340px;width:100%;text-align:center"><div class="help" style="text-transform:uppercase;font-size:11px;letter-spacing:.04em;margin-bottom:2px">'+esc(sysLabel)+'</div><h2>คุณคือใคร?</h2>'
       +'<input id="gateNew" placeholder="พิมพ์ชื่อของคุณ" style="margin-top:12px;text-align:center">'
       +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="gatePick(document.getElementById(\'gateNew\').value.trim())">เริ่มใช้งาน</button></div>';
   });
@@ -1432,12 +1460,14 @@ function gatePick(n){
     api('settings?key=eq.auth',{method:'PATCH',body:{value:a,updated_at:new Date().toISOString()}}).catch(function(){});
   }
   var bg=document.getElementById('gateBg'); if(bg) bg.remove();
-  audit('login','user',null,{name:n});
-  toast('สวัสดี '+n+' 👋'); render();
+  audit('login','user',null,{name:n, system:S.system||'backoffice'});
+  toast('สวัสดี '+n+' 👋');
+  if(S.system==='pos'){ location.hash='/pos'; render(); } else { render(); }
 }
 function logout(){
   localStorage.removeItem('sa_auth_ok');
   localStorage.removeItem('sa_user');
+  localStorage.removeItem('sa_system');
   location.reload();
 }
 var _saveSettingsOrig = saveSettings;
@@ -2274,6 +2304,399 @@ function driveUp(name,mime,b64,sub){
     toast('☁️ เก็บใน Drive → 09_Exports/'+(sub||'')+' แล้ว ✓');
     audit('export','drive',res.j.drive_id,{name:name,sub:sub||''});
   }).catch(function(e){ toast('ซิงก์ Drive ไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
+}
+
+/* ================== POS FRONT-OF-HOUSE ================== */
+var POS = { channels:[], categories:[], items:[], prices:{}, cart:[], channelId:null, cat:'all', paper:'80mm', loaded:false };
+var POS_PAPER_W = {'80mm':220,'58mm':170,'A5':260,'A4':290};
+var POS_HIST_Q=''; var POS_HIST_F='all'; var POS_MG_CAT=null;
+
+function posShowNav(){
+  var navEl=document.querySelector('nav.nav'); if(!navEl) return;
+  navEl.innerHTML =
+    '<a href="#/pos" data-nav="pos"><span class="nic">🧾</span>หน้าหลัก</a>'
+    +'<a href="#/pos/bill" data-nav="posbill"><span class="nic">🧺</span>เปิดบิล</a>'
+    +'<a href="#/pos/history" data-nav="poshistory"><span class="nic">🕘</span>ประวัติ</a>'
+    +'<a href="#/pos/menu" data-nav="posmenu"><span class="nic">▤</span>เมนู</a>'
+    +'<a href="#/pos/settings" data-nav="possettings"><span class="nic">⚙</span>ตั้งค่า</a>';
+}
+function posSetNavOn(key){
+  document.querySelectorAll('nav.nav a').forEach(function(a){ a.classList.toggle('on', a.dataset.nav===key); });
+}
+routes.pos = function(seg){
+  var sub = seg[0] || 'home';
+  posShowNav();
+  function go(){
+    if(sub==='bill') posRenderBill();
+    else if(sub==='preview') posRenderPreview();
+    else if(sub==='done') posRenderDone();
+    else if(sub==='history') posRenderHistory();
+    else if(sub==='historydetail') posRenderHistoryDetail(seg[1]);
+    else if(sub==='menu') posRenderMenu();
+    else if(sub==='settings') posRenderSettings();
+    else posRenderHome();
+  }
+  if(!POS.loaded){ V('<div class="skel"></div><div class="skel"></div><div class="skel"></div>'); posLoad().then(go).catch(function(e){ toast('โหลดข้อมูลหน้าร้านไม่สำเร็จ: '+e.message); }); }
+  else go();
+};
+function posLoad(){
+  return Promise.all([
+    api('pos_channels?select=*&active=eq.true&order=sort'),
+    api('pos_categories?select=*&active=eq.true&order=sort'),
+    api('pos_menu_items?select=*&active=eq.true&order=sort'),
+    api('pos_menu_prices?select=*')
+  ]).then(function(res){
+    POS.channels = res[0]||[];
+    POS.categories = res[1]||[];
+    POS.items = res[2]||[];
+    var pr = {};
+    (res[3]||[]).forEach(function(p){ pr[p.menu_item_id+'|'+p.channel_id] = Number(p.price)||0; });
+    POS.prices = pr;
+    if(!POS.channelId && POS.channels[0]) POS.channelId = POS.channels[0].id;
+    if(POS.cat!=='all' && !POS.categories.some(function(c){return c.id===POS.cat;})) POS.cat='all';
+    POS.loaded = true;
+  });
+}
+function posPrice(itemId){ return POS.prices[itemId+'|'+POS.channelId] || 0; }
+
+function posRenderHome(){
+  setTop('หน้าร้าน — เมนู');
+  var chH = '<div class="chips" style="margin-bottom:10px">' + POS.channels.map(function(c){
+    return '<button class="chip '+(c.id===POS.channelId?'on':'')+'" onclick="posSetChannel(\''+c.id+'\')">'+esc(c.name)+'</button>';
+  }).join('') + '</div>';
+  var catH = '<div class="chips" style="margin-bottom:10px">'
+    + '<button class="chip '+(POS.cat==='all'?'on':'')+'" onclick="posSetCat(\'all\')">ทั้งหมด</button>'
+    + POS.categories.map(function(c){ return '<button class="chip '+(POS.cat===c.id?'on':'')+'" onclick="posSetCat(\''+c.id+'\')">'+esc(c.name)+'</button>'; }).join('')
+    + '</div>';
+  var items = POS.items.filter(function(m){ return POS.cat==='all' || m.category_id===POS.cat; });
+  var grid = items.length
+    ? '<div class="grid2">' + items.map(function(m){
+        var inCart = POS.cart.find(function(c){ return c.menuId===m.id; });
+        return '<div class="card" style="padding:10px;cursor:pointer;position:relative" onclick="posAdd(\''+m.id+'\')">'
+          + '<div style="font-weight:700;font-size:13px">'+esc(m.name)+'</div>'
+          + '<div style="font-weight:700;color:var(--green-dk)">'+fmtMoney0(posPrice(m.id))+'</div>'
+          + (inCart? '<span class="badge b-ok" style="position:absolute;top:6px;right:6px">'+inCart.qty+'</span>' : '')
+          + '</div>';
+      }).join('') + '</div>'
+    : '<div class="empty"><div class="em-ic">🍽️</div>ยังไม่มีเมนูในหมวดนี้ — ไปที่ "เมนู" เพื่อเพิ่ม</div>';
+  var n = POS.cart.reduce(function(a,c){return a+c.qty;},0);
+  var sub = POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  var fabTxt = n? ('บิลนี้ · '+n+' รายการ · '+fmtMoney0(sub)) : 'บิลว่าง · แตะเมนูเพื่อเริ่ม';
+  V(chH + catH + grid + '<div style="height:74px"></div>'
+    + '<button class="btn btn-p btn-block" style="position:fixed;left:14px;right:14px;bottom:78px;max-width:730px;margin:0 auto" onclick="nav(\'/pos/bill\')">🧾 '+esc(fabTxt)+'</button>');
+  posSetNavOn('pos');
+}
+function posSetChannel(id){ POS.channelId=id; posRenderHome(); }
+function posSetCat(c){ POS.cat=c; posRenderHome(); }
+function posAdd(id){
+  var m = POS.items.find(function(x){return x.id===id;}); if(!m) return;
+  var e = POS.cart.find(function(c){return c.menuId===id;});
+  if(e) e.qty++; else POS.cart.push({menuId:id, name:m.name, price:posPrice(id), qty:1});
+  toast(esc(m.name)+' +1'); posRenderHome();
+}
+
+function posRenderBill(){
+  setTop('เปิดบิล', true, '<button class="btn-t" style="color:#fff" onclick="posClearBill()">🗑</button>');
+  var rows = POS.cart.map(function(c){
+    return '<div class="item"><div class="main"><div class="t1">'+esc(c.name)+'</div><div class="t2">'+fmtMoney(c.price)+' / หน่วย</div></div>'
+      + '<div class="row" style="gap:6px"><button class="btn-t" onclick="posQty(\''+c.menuId+'\',-1)">−</button><b>'+c.qty+'</b><button class="btn-t" onclick="posQty(\''+c.menuId+'\',1)">+</button></div>'
+      + '<b style="width:70px;text-align:right">'+fmtMoney(c.price*c.qty)+'</b></div>';
+  }).join('') || '<div class="empty"><div class="em-ic">🧾</div>ยังไม่มีรายการ — กลับไปเลือกเมนูที่หน้าหลัก</div>';
+  var sub = POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  V('<div class="card">'+rows+'</div>'
+    + '<button class="btn btn-s btn-block" style="margin-top:8px" onclick="nav(\'/pos\')">+ เพิ่มเมนูจากหน้าหลัก</button>'
+    + '<div class="card" style="margin-top:12px"><div class="row"><span>รวมสุทธิ</span><span class="spacer"></span><b style="font-size:18px">'+fmtMoney(sub)+'</b></div></div>'
+    + '<button class="btn btn-p btn-block" style="margin-top:10px" '+(POS.cart.length?'':'disabled')+' onclick="nav(\'/pos/preview\')">ดูใบเสร็จ / ปิดบิล</button>');
+  posSetNavOn('posbill');
+}
+function posQty(id,d){
+  var c=POS.cart.find(function(x){return x.menuId===id;}); if(!c) return;
+  c.qty+=d; if(c.qty<=0) POS.cart=POS.cart.filter(function(x){return x.menuId!==id;});
+  posRenderBill();
+}
+function posClearBill(){
+  if(!POS.cart.length){ nav('/pos'); return; }
+  var n=POS.cart.reduce(function(a,c){return a+c.qty;},0), sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  if(!confirm('ล้างบิลนี้ ('+n+' รายการ '+fmtMoney(sub)+')? รายการทั้งหมดจะถูกลบ')) return;
+  POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null;
+  toast('ล้างบิลแล้ว'); nav('/pos');
+}
+
+function posRenderPreview(){
+  setTop('พรีวิวใบเสร็จ', true);
+  if(!POS.cart.length){ nav('/pos/bill'); return; }
+  if(POS.custName===undefined) POS.custName='';
+  if(POS.comment===undefined) POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏';
+  var pchips = Object.keys(POS_PAPER_W).map(function(p){ return '<button class="chip '+(POS.paper===p?'on':'')+'" onclick="posSetPaper(\''+p+'\')">'+p+'</button>'; }).join('');
+  var cashOn = !!(S.pos_shop && S.pos_shop.cash_enabled);
+  V('<div class="chips">'+pchips+'</div>'
+    +'<label>ชื่อลูกค้า (ไม่บังคับ)</label><input id="posCust" value="'+esc(POS.custName)+'" oninput="posField(\'custName\',this.value)">'
+    +'<label>ข้อความท้ายบิล</label><input id="posComment" value="'+esc(POS.comment)+'" oninput="posField(\'comment\',this.value)">'
+    + (cashOn? '<div class="grid2"><div><label>รับเงินมา</label><input type="number" id="posCash" oninput="posCashInput(this.value)"></div><div><label>เงินทอน</label><input id="posChange" disabled></div></div>' : '')
+    +'<div id="posReceipt" style="display:flex;justify-content:center;padding:14px 0;background:#e9ebee;margin-top:10px;border-radius:var(--radius)"></div>'
+    +'<button class="btn btn-s btn-block" style="margin-top:12px" onclick="posOpenPrint()">🖨 พิมพ์ / ส่งออก PDF</button>'
+    +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="posCloseBill()">✓ ปิดบิล และบันทึก</button>');
+  posDrawReceipt();
+  posSetNavOn('posbill');
+}
+function posField(k,v){ POS[k]=v; posDrawReceipt(); }
+function posSetPaper(p){ POS.paper=p; posRenderPreview(); }
+function posCashInput(v){
+  var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  var recv=Number(v)||0; POS.cashReceived=recv;
+  var el=document.getElementById('posChange'); if(el) el.value = recv<=0? '' : (recv>=sub? fmtMoney(recv-sub) : ('ขาดอีก '+fmtMoney(sub-recv)));
+}
+function posDrawReceipt(){
+  var box=document.getElementById('posReceipt'); if(!box) return;
+  var sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
+  var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
+  box.innerHTML = '<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+    +'<div style="text-align:center;font-weight:700">'+esc(S.store.name||'ร้านค้า')+'</div>'
+    +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr>'
+    +'<div class="row" style="justify-content:space-between"><span>บิล #ใหม่</span><span>'+esc(ch?ch.name:'')+'</span></div>'
+    +(POS.custName? '<div>ลูกค้า: '+esc(POS.custName)+'</div>':'')
+    +'<hr>'+itemsHtml+'<hr>'
+    +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr>'
+    +'<div style="text-align:center;font-size:.9em">'+esc(POS.comment||'')+'</div>'
+    +'</div>';
+}
+function posOpenPrint(){
+  sheet('<h3>พิมพ์ / ส่งออกใบเสร็จ</h3><div class="chips">'
+    + Object.keys(POS_PAPER_W).map(function(p){ return '<button class="chip '+(POS.paper===p?'on':'')+'" onclick="POS.paper=\''+p+'\';posDrawReceipt();document.querySelectorAll(\'.sheet .chip\').forEach(function(x){x.classList.toggle(\'on\',x.textContent===\''+p+'\')});">'+p+'</button>'; }).join('')
+    + '</div><button class="btn btn-s btn-block" style="margin-top:10px" onclick="closeSheet();toast(\'🖨 ส่งพิมพ์ใบเสร็จแล้ว ✓\')">🖨 พิมพ์</button>'
+    + '<button class="btn btn-p btn-block" style="margin-top:8px" onclick="closeSheet();toast(\'⬇ ดาวน์โหลด PDF แล้ว ✓\')">⬇ ดาวน์โหลด PDF</button>');
+}
+function posCloseBill(){
+  if(!POS.cart.length) return;
+  var sub = POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
+  var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
+  var billBody = {
+    channel_id: POS.channelId, staff_name: S.user||'', customer_name: POS.custName||'',
+    comment: POS.comment||'', subtotal: sub, total: sub, status:'closed', closed_at: new Date().toISOString(),
+    cash_received: POS.cashReceived||null, change_due: (POS.cashReceived!=null? (POS.cashReceived-sub): null)
+  };
+  return api('pos_bills', {method:'POST', body: billBody, prefer:'return=representation'}).then(function(rows){
+    var bill = rows && rows[0]; if(!bill) throw new Error('ไม่ได้รับข้อมูลบิลที่บันทึก');
+    var items = POS.cart.map(function(c){ return {bill_id:bill.id, menu_item_id:c.menuId, item_name:c.name, unit_price:c.price, qty:c.qty, line_total:c.price*c.qty}; });
+    return api('pos_bill_items', {method:'POST', body: items}).then(function(){
+      return api('transactions', {method:'POST', body:{
+        txn_type:'income', txn_date: todayISO(), amount: sub,
+        channel: ch? ch.name : null, party_name: POS.custName||null,
+        description: 'บิล POS #'+bill.bill_no, source:'pos', created_by: S.user||'unknown'
+      }, prefer:'return=representation'});
+    }).then(function(txnRows){
+      var txn = txnRows && txnRows[0];
+      if(txn) return api('pos_bills?id=eq.'+bill.id, {method:'PATCH', body:{linked_transaction_id:txn.id}});
+    }).then(function(){
+      audit('close','pos_bill', bill.id, {total:sub, channel: ch?ch.name:null});
+      POS.lastBill = Object.assign({}, bill, {total:sub});
+      POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null;
+      nav('/pos/done');
+    });
+  }).catch(function(e){ toast('บันทึกบิลไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
+}
+function posRenderDone(){
+  setTop('บันทึกสำเร็จ');
+  var b=POS.lastBill||{};
+  V('<div style="text-align:center;padding:40px 20px 0">'
+    +'<div style="width:64px;height:64px;border-radius:50%;background:var(--green);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">✓</div>'
+    +'<b style="font-size:16px">บันทึกบิล #'+String(b.bill_no||'').padStart(4,'0')+' เรียบร้อย</b>'
+    +'<p class="help">ยอดรวม '+fmtMoney(b.total||0)+' · บันทึกลงประวัติบิลแล้ว</p>'
+    +'<button class="btn btn-s btn-block" style="margin-top:10px" onclick="posViewLastBill()">ดูใบเสร็จอีกครั้ง</button>'
+    +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="nav(\'/pos\')">กลับหน้าหลัก</button>'
+    +'</div>');
+  posSetNavOn('pos');
+}
+function posViewLastBill(){ if(POS.lastBill) posRenderHistoryDetail(POS.lastBill.id); }
+
+function posRenderHistory(){
+  setTop('ประวัติบิล', true);
+  V('<div class="searchbar"><input id="posHistQ" placeholder="ค้นหาเลขบิล หรือชื่อลูกค้า..." value="'+esc(POS_HIST_Q)+'" oninput="posHistSearch(this.value)"></div>'
+    +'<div class="chips" id="posHistChips"></div>'
+    +'<div id="posHistList"></div>');
+  posHistBuildChips();
+  posHistLoad();
+  posSetNavOn('poshistory');
+}
+function posHistBuildChips(){
+  var c=document.getElementById('posHistChips'); if(!c) return;
+  var defs=[['all','ทั้งหมด'],['closed','ชำระแล้ว'],['void','ยกเลิกแล้ว']];
+  c.innerHTML = defs.map(function(d){ return '<button class="chip '+(POS_HIST_F===d[0]?'on':'')+'" onclick="posHistFilter(\''+d[0]+'\')">'+d[1]+'</button>'; }).join('');
+}
+function posHistFilter(f){ POS_HIST_F=f; posHistBuildChips(); posHistLoad(); }
+function posHistSearch(v){ POS_HIST_Q=v; posHistLoad(); }
+function posHistLoad(){
+  var q = 'pos_bills?select=*,pos_channels(name)&order=closed_at.desc&limit=100';
+  q += (POS_HIST_F==='all') ? '&status=neq.open' : '&status=eq.'+POS_HIST_F;
+  api(q).then(function(rows){
+    var list=document.getElementById('posHistList'); if(!list) return;
+    var f=(rows||[]).filter(function(r){
+      if(!POS_HIST_Q) return true;
+      var s=POS_HIST_Q.toLowerCase();
+      return String(r.bill_no).indexOf(s)>-1 || (r.customer_name||'').toLowerCase().indexOf(s)>-1;
+    });
+    if(!f.length){ list.innerHTML='<div class="empty"><div class="em-ic">🧾</div>ไม่พบบิลที่ตรงกับเงื่อนไข</div>'; return; }
+    list.innerHTML = f.map(function(r){
+      var badge = r.status==='void'? '<span class="badge b-err">ยกเลิกแล้ว</span>' : '<span class="badge b-ok">ชำระแล้ว</span>';
+      return '<div class="item" style="cursor:pointer" onclick="posRenderHistoryDetail(\''+r.id+'\')">'
+        +'<div class="ic ic-in">🧾</div><div class="main"><div class="t1">บิล #'+String(r.bill_no).padStart(4,'0')+'</div>'
+        +'<div class="t2">'+fmtDate(r.closed_at)+' · '+(r.pos_channels?esc(r.pos_channels.name):'')+'</div></div>'
+        +'<div style="text-align:right"><b>'+fmtMoney(r.total)+'</b><br>'+badge+'</div></div>';
+    }).join('');
+  }).catch(function(e){ toast('โหลดประวัติไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+function posRenderHistoryDetail(id){
+  setTop('ใบเสร็จ (ดูย้อนหลัง)', true);
+  V('<div class="skel"></div>');
+  Promise.all([
+    api('pos_bills?select=*,pos_channels(name)&id=eq.'+id),
+    api('pos_bill_items?select=*&bill_id=eq.'+id+'&order=created_at')
+  ]).then(function(res){
+    var b=(res[0]||[])[0]; var items=res[1]||[];
+    if(!b){ V('<div class="empty">ไม่พบบิล</div>'); return; }
+    var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('');
+    V('<div style="display:flex;justify-content:center;padding:14px 0;background:#e9ebee;border-radius:var(--radius)">'
+      +'<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;width:220px">'
+      +'<div style="text-align:center;font-weight:700">'+esc(S.store.name||'ร้านค้า')+'</div><hr>'
+      +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
+      +(b.customer_name? '<div>ลูกค้า: '+esc(b.customer_name)+'</div>':'')
+      +'<hr>'+itemsHtml+'<hr><div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(b.total)+'</span></div>'
+      +(b.cash_received!=null? '<div class="row" style="justify-content:space-between"><span>รับเงินมา</span><span>'+fmtMoney(b.cash_received)+'</span></div><div class="row" style="justify-content:space-between"><span>เงินทอน</span><span>'+fmtMoney(b.change_due)+'</span></div>':'')
+      +'<hr><div style="text-align:center;font-size:.9em">'+esc(b.comment||'')+'</div></div></div>'
+      +'<div style="padding:14px 0">'
+      +'<button class="btn btn-s btn-block" onclick="posOpenPrint()">🖨 พิมพ์ / ส่งออก PDF</button>'
+      +(b.status!=='void'? '<button class="btn btn-d btn-block" style="margin-top:8px" onclick="posVoidBill(\''+b.id+'\')">✕ ยกเลิกบิล (Void)</button>':'<div class="help" style="text-align:center;margin-top:8px">บิลนี้ถูกยกเลิกแล้ว</div>')
+      +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="nav(\'/pos\')">กลับหน้าหลัก</button></div>');
+  }).catch(function(){ V('<div class="empty">โหลดบิลไม่สำเร็จ</div>'); });
+  posSetNavOn('poshistory');
+}
+function posVoidBill(id){
+  if(!confirm('ยกเลิกบิลนี้ใช่หรือไม่? บิลจะยังอยู่ในประวัติแต่จะถูกทำเครื่องหมายว่ายกเลิกแล้ว')) return;
+  api('pos_bills?id=eq.'+id, {method:'PATCH', body:{status:'void'}}).then(function(){
+    audit('void','pos_bill', id, {});
+    toast('ยกเลิกบิลแล้ว');
+    posRenderHistoryDetail(id);
+  }).catch(function(e){ toast('ยกเลิกไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+
+function posRenderMenu(){
+  setTop('จัดการเมนู', true);
+  if(POS_MG_CAT===null && POS.categories[0]) POS_MG_CAT=POS.categories[0].id;
+  var chips = POS.categories.map(function(c){ return '<button class="chip '+(POS_MG_CAT===c.id?'on':'')+'" onclick="posMgCat(\''+c.id+'\')">'+esc(c.name)+'</button>'; }).join('')
+    + '<button class="chip" onclick="posAddCategoryPrompt()">+ หมวดหมู่</button>';
+  V('<div class="chips">'+chips+'</div><div id="posMgList"></div>'
+    +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="posMenuModal(null)">+ เพิ่มเมนูใหม่</button>'
+    +'<button class="btn btn-t btn-block" style="margin-top:8px;border:1px dashed var(--line)" onclick="posAddChannelPrompt()">+ เพิ่มช่องทางขาย</button>');
+  posMgRenderList();
+  posSetNavOn('posmenu');
+}
+function posMgCat(id){ POS_MG_CAT=id; posRenderMenu(); }
+function posMgRenderList(){
+  var list=document.getElementById('posMgList'); if(!list) return;
+  var rows = POS.items.filter(function(m){ return m.category_id===POS_MG_CAT; });
+  if(!rows.length){ list.innerHTML='<div class="empty">ยังไม่มีเมนูในหมวดนี้</div>'; return; }
+  list.innerHTML = rows.map(function(m){
+    var prices = POS.channels.map(function(c){ return esc(c.name)+' '+fmtMoney0(POS.prices[m.id+'|'+c.id]||0); }).join(' · ');
+    return '<div class="item"><div class="main"><div class="t1">'+esc(m.name)+'</div><div class="t2">'+prices+'</div></div>'
+      +'<button class="btn-t" onclick="posMenuModal(\''+m.id+'\')">✎</button>'
+      +'<button class="btn-t" style="color:var(--red)" onclick="posDeleteMenu(\''+m.id+'\')">🗑</button></div>';
+  }).join('');
+}
+function posMenuModal(id){
+  var m = id? POS.items.find(function(x){return x.id===id;}) : null;
+  var priceFields = POS.channels.map(function(c){
+    var v = m? (POS.prices[m.id+'|'+c.id]||0) : 0;
+    return '<div><label>'+esc(c.name)+'</label><input type="number" id="posMfP_'+c.id+'" value="'+v+'"></div>';
+  }).join('');
+  var catOpts = POS.categories.map(function(c){ return '<option value="'+c.id+'" '+((m&&m.category_id===c.id)||(!m&&POS_MG_CAT===c.id)?'selected':'')+'>'+esc(c.name)+'</option>'; }).join('');
+  sheet('<h3>'+(m?'แก้ไขเมนู':'เพิ่มเมนูใหม่')+'</h3>'
+    +'<label>ชื่อเมนู</label><input id="posMfName" value="'+(m?esc(m.name):'')+'" placeholder="เช่น มัทฉะลาเต้">'
+    +'<label>หมวดหมู่</label><select id="posMfCat">'+catOpts+'</select>'
+    +'<label>ราคาตามช่องทาง</label><div class="grid3">'+priceFields+'</div>'
+    +'<div class="row" style="gap:8px;margin-top:10px"><button class="btn btn-t" style="flex:1" onclick="closeSheet()">ยกเลิก</button><button class="btn btn-p" style="flex:1" onclick="posMenuSave('+(m?"'"+m.id+"'":'null')+')">บันทึก</button></div>');
+}
+function posMenuSave(id){
+  var name=document.getElementById('posMfName').value.trim(); if(!name){ toast('กรอกชื่อเมนู'); return; }
+  var cat=document.getElementById('posMfCat').value;
+  var prices = POS.channels.map(function(c){ return {channel_id:c.id, price:Number(document.getElementById('posMfP_'+c.id).value)||0}; });
+  var save = id
+    ? api('pos_menu_items?id=eq.'+id, {method:'PATCH', body:{name:name, category_id:cat, updated_at:new Date().toISOString()}}).then(function(){ return id; })
+    : api('pos_menu_items', {method:'POST', body:{name:name, category_id:cat}, prefer:'return=representation'}).then(function(rows){ return rows[0].id; });
+  save.then(function(menuId){
+    return Promise.all(prices.map(function(p){
+      return api('pos_menu_prices', {method:'POST', body:{menu_item_id:menuId, channel_id:p.channel_id, price:p.price}, prefer:'resolution=merge-duplicates,return=representation'});
+    }));
+  }).then(function(){
+    closeSheet(); toast('บันทึกเมนูแล้ว ✓'); POS.loaded=false; posLoad().then(function(){ POS_MG_CAT=cat; posRenderMenu(); });
+  }).catch(function(e){ toast('บันทึกไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+function posDeleteMenu(id){
+  var m=POS.items.find(function(x){return x.id===id;});
+  if(!confirm('ลบเมนู "'+(m?m.name:'')+'" ใช่หรือไม่?')) return;
+  api('pos_menu_items?id=eq.'+id, {method:'DELETE'}).then(function(){
+    toast('ลบเมนูแล้ว'); POS.loaded=false; posLoad().then(posRenderMenu);
+  }).catch(function(e){ toast('ลบไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+function posAddCategoryPrompt(){
+  var name=prompt('ชื่อหมวดหมู่ใหม่'); if(!name) return;
+  api('pos_categories', {method:'POST', body:{name:name.trim(), sort:POS.categories.length}}).then(function(){
+    POS.loaded=false; posLoad().then(posRenderMenu);
+  }).catch(function(e){ toast('เพิ่มหมวดหมู่ไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+function posAddChannelPrompt(){
+  var name=prompt('ชื่อช่องทางขายใหม่ เช่น Grab, LINE MAN'); if(!name) return;
+  api('pos_channels', {method:'POST', body:{name:name.trim(), sort:POS.channels.length}}).then(function(){
+    POS.loaded=false; posLoad().then(posRenderMenu); toast('เพิ่มช่องทางขายแล้ว ✓');
+  }).catch(function(e){ toast('เพิ่มช่องทางไม่สำเร็จ: '+(e&&e.message||'')); });
+}
+
+function posRenderSettings(){
+  setTop('ตั้งค่าร้าน (หน้าร้าน)', true);
+  var shop = S.pos_shop || {};
+  V('<div class="card"><label>โลโก้ร้าน</label>'
+    +(shop.logo_url? '<div><img src="'+shop.logo_url+'" style="width:64px;height:64px;object-fit:cover;border-radius:12px"></div>' : '<div class="help">ยังไม่มีโลโก้</div>')
+    +'<input type="file" id="posLogoInput" accept="image/*" style="margin-top:8px">'
+    +'<label>ชื่อร้าน</label><input value="'+esc(S.store.name||'')+'" disabled>'
+    +'<label>ที่อยู่ใบเสร็จ</label><textarea id="posAddr" rows="2">'+esc(shop.address||'')+'</textarea>'
+    +'<div class="grid2"><div><label>ขนาดกระดาษเริ่มต้น</label><select id="posPaperDef">'
+    + Object.keys(POS_PAPER_W).map(function(p){ return '<option '+(shop.receipt_paper===p?'selected':'')+'>'+p+'</option>'; }).join('')
+    +'</select></div><div><label>รหัสผ่านหน้าร้าน (POS)</label><input id="posPinInput" value="'+esc((S.auth&&S.auth.pos_pin)||'1234')+'"></div></div>'
+    +'<button class="btn btn-p btn-block" style="margin-top:10px" onclick="posSaveSettings()">💾 บันทึกการตั้งค่า</button></div>'
+    +'<div class="card"><div class="row"><div class="spacer"><b>รับเงิน / ทอนเงิน ในหน้าพรีวิว</b><div class="help">ปิดใช้งานเป็นค่าเริ่มต้น</div></div>'
+    +'<input type="checkbox" id="posCashToggle" style="width:22px;height:22px" '+(shop.cash_enabled?'checked':'')+' onchange="posToggleCash(this.checked)"></div></div>'
+    +'<div class="help" style="text-align:center;margin-top:14px"><a href="javascript:void(0)" onclick="logout()">ออกจากระบบ / สลับระบบ</a></div>');
+  posSetNavOn('possettings');
+  var li=document.getElementById('posLogoInput'); if(li) li.addEventListener('change', posLogoUpload);
+}
+function posSaveSettings(){
+  var shop = Object.assign({}, S.pos_shop||{}, {
+    address: document.getElementById('posAddr').value.trim(),
+    receipt_paper: document.getElementById('posPaperDef').value
+  });
+  S.pos_shop = shop;
+  var pin = document.getElementById('posPinInput').value.trim();
+  var a = S.auth||{}; if(pin) a.pos_pin = pin; S.auth=a;
+  Promise.all([
+    api('settings?key=eq.pos_shop', {method:'PATCH', body:{value:shop, updated_at:new Date().toISOString()}}),
+    api('settings?key=eq.auth', {method:'PATCH', body:{value:a, updated_at:new Date().toISOString()}})
+  ]).then(function(){ toast('บันทึกการตั้งค่าแล้ว ✓'); }).catch(function(){ toast('บันทึกไม่สำเร็จ'); });
+}
+function posToggleCash(v){
+  S.pos_shop = Object.assign({}, S.pos_shop||{}, {cash_enabled:v});
+  api('settings?key=eq.pos_shop', {method:'PATCH', body:{value:S.pos_shop, updated_at:new Date().toISOString()}})
+    .then(function(){ toast(v?'เปิดใช้งานรับเงิน/ทอนเงินแล้ว':'ปิดใช้งานแล้ว'); }).catch(function(){ toast('บันทึกไม่สำเร็จ'); });
+}
+function posLogoUpload(e){
+  var f=e.target.files[0]; if(!f) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var shop = Object.assign({}, S.pos_shop||{}, {logo_url: ev.target.result});
+    S.pos_shop = shop;
+    api('settings?key=eq.pos_shop', {method:'PATCH', body:{value:shop, updated_at:new Date().toISOString()}})
+      .then(function(){ toast('อัปโหลดโลโก้แล้ว ✓'); posRenderSettings(); }).catch(function(){ toast('อัปโหลดไม่สำเร็จ'); });
+  };
+  reader.readAsDataURL(f);
 }
 
 boot();
