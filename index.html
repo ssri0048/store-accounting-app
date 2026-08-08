@@ -2473,7 +2473,7 @@ function posDrawReceipt(){
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
   var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
-  box.innerHTML = '<div style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+  box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
     +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:52px;height:52px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
     +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr>'
@@ -2496,9 +2496,10 @@ function posPrintReceipt(){
   if(!box || !box.innerHTML.trim()){ toast('ไม่พบใบเสร็จให้พิมพ์'); return; }
   var ifr = document.getElementById('posPrintFrame');
   if(!ifr){ ifr=document.createElement('iframe'); ifr.id='posPrintFrame'; ifr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'; document.body.appendChild(ifr); }
+  var pageSize = ({'80mm':'80mm auto','58mm':'58mm auto','A5':'A5','A4':'A4'})[POS.paper] || 'A4';
   var doc = ifr.contentWindow.document;
   doc.open();
-  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ใบเสร็จ</title><style>@page{margin:6mm}body{margin:0;background:#fff}</style></head><body>'+box.innerHTML+'</body></html>');
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ใบเสร็จ</title><style>@page{size:'+pageSize+';margin:3mm}body{margin:0;background:#fff}.receiptBox{width:100% !important;box-sizing:border-box}</style></head><body>'+box.innerHTML+'</body></html>');
   doc.close();
   setTimeout(function(){ ifr.contentWindow.focus(); ifr.contentWindow.print(); }, 250);
 }
