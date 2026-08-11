@@ -124,6 +124,7 @@ input[type="date"],input[type="month"]{-webkit-appearance:none;appearance:none;m
 </nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ================== CONFIG ================== */
 var CFG = {
@@ -2479,7 +2480,7 @@ function posDrawReceipt(){
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
   var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px dotted #ddd"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
-  box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+  box.innerHTML = '<div class="receiptBox" style="position:relative;background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
     +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
     +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
@@ -2489,6 +2490,24 @@ function posDrawReceipt(){
     +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
     +'<div style="text-align:center;font-size:.9em">'+esc(POS.comment||'')+'</div>'
     +'</div>';
+  posQueueReceiptSnapshot();
+}
+function posQueueReceiptSnapshot(){
+  clearTimeout(POS._snapTimer);
+  POS._snapTimer = setTimeout(posSnapshotReceipt, 350);
+}
+function posSnapshotReceipt(){
+  var box=document.getElementById('posReceipt'); if(!box) return;
+  var rb=box.querySelector('.receiptBox'); if(!rb || typeof html2canvas!=='function') return;
+  var old=rb.querySelector('img.posReceiptSnap'); if(old) old.remove();
+  html2canvas(rb, {backgroundColor:'#fff', scale:2, useCORS:true}).then(function(canvas){
+    var rb2=box.querySelector('.receiptBox'); if(!rb2) return;
+    var img=document.createElement('img');
+    img.className='posReceiptSnap';
+    img.src=canvas.toDataURL('image/png');
+    img.style.cssText='position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;-webkit-touch-callout:default;';
+    rb2.appendChild(img);
+  }).catch(function(){});
 }
 function posDrawReceiptFromBill(box){
   var b = POS_HIST_BILL.bill, items = POS_HIST_BILL.items;
