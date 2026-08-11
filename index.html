@@ -2651,7 +2651,7 @@ function posRenderMenu(){
   var chips = POS.categories.map(function(c){ return '<button class="chip '+(POS_MG_CAT===c.id?'on':'')+'" onclick="posMgCat(\''+c.id+'\')">'+esc(c.name)+'</button>'; }).join('')
     + '<button class="chip" onclick="posAddCategoryPrompt()">+ หมวดหมู่</button>';
   var curCat = POS.categories.find(function(x){return x.id===POS_MG_CAT;});
-  var catEdit = curCat? '<div class="help" style="cursor:pointer;margin:-4px 0 10px" onclick="posRenameCategory(\''+curCat.id+'\')">✎ แก้ไขชื่อหมวดหมู่นี้</div>' : '';
+  var catEdit = curCat? '<div class="help" style="cursor:pointer;margin:10px 0 10px" onclick="posRenameCategory(\''+curCat.id+'\')">✎ แก้ไขชื่อหมวดหมู่นี้</div>' : '';
   var chanRows = POS.channels.map(function(c){ return '<div class="row" style="padding:4px 0"><span class="spacer">'+esc(c.name)+'</span><button class="btn-t" onclick="posRenameChannel(\''+c.id+'\')">✎</button></div>'; }).join('');
   V('<div class="chips">'+chips+'</div>'+catEdit+'<div id="posMgList"></div>'
     +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="posMenuModal(null)">+ เพิ่มเมนูใหม่</button>'
