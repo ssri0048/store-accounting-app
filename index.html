@@ -2675,7 +2675,7 @@ function posMenuSave(id){
     : api('pos_menu_items', {method:'POST', body:{name:name, category_id:cat}, prefer:'return=representation'}).then(function(rows){ return rows[0].id; });
   save.then(function(menuId){
     return Promise.all(prices.map(function(p){
-      return api('pos_menu_prices', {method:'POST', body:{menu_item_id:menuId, channel_id:p.channel_id, price:p.price}, prefer:'resolution=merge-duplicates,return=representation'});
+      return api('pos_menu_prices?on_conflict=menu_item_id,channel_id', {method:'POST', body:{menu_item_id:menuId, channel_id:p.channel_id, price:p.price}, prefer:'resolution=merge-duplicates,return=representation'});
     }));
   }).then(function(){
     closeSheet(); toast('บันทึกเมนูแล้ว ✓'); POS.loaded=false; posLoad().then(function(){ POS_MG_CAT=cat; posRenderMenu(); });
