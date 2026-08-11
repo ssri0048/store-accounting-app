@@ -2502,7 +2502,7 @@ function posSnapshotReceipt(){
   var box=document.getElementById('posReceipt'); if(!box) return;
   var rb=box.querySelector('.receiptBox'); if(!rb || typeof html2canvas!=='function') return;
   var old=rb.querySelector('img.posReceiptSnap'); if(old) old.remove();
-  html2canvas(rb, {backgroundColor:'#fff', scale:2, useCORS:true}).then(function(canvas){
+  html2canvas(rb, {backgroundColor:'#fff', scale:3, useCORS:true, letterRendering:true}).then(function(canvas){
     var rb2=box.querySelector('.receiptBox'); if(!rb2) return;
     var img=document.createElement('img');
     img.className='posReceiptSnap';
