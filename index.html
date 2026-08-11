@@ -2438,7 +2438,7 @@ function posClearBill(){
   if(!POS.cart.length){ nav('/pos'); return; }
   var n=POS.cart.reduce(function(a,c){return a+c.qty;},0), sub=POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   if(!confirm('ล้างบิลนี้ ('+n+' รายการ '+fmtMoney(sub)+')? รายการทั้งหมดจะถูกลบ')) return;
-  POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null;
+  POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null; POS.previewBillNo=null;
   toast('ล้างบิลแล้ว'); nav('/pos');
 }
 
@@ -2459,6 +2459,10 @@ function posRenderPreview(){
     +'<button class="btn btn-p btn-block" style="margin-top:8px" onclick="posCloseBill()">✓ ปิดบิล และบันทึก</button>');
   posDrawReceipt();
   posSetNavOn('posbill');
+  api('pos_bills?select=bill_no&order=bill_no.desc&limit=1').then(function(rows){
+    POS.previewBillNo = ((rows && rows[0] && rows[0].bill_no) || 0) + 1;
+    posDrawReceipt();
+  }).catch(function(){});
 }
 function posField(k,v){ POS[k]=v; posDrawReceipt(); }
 function posSetPaper(p){ POS.paper=p; posRenderPreview(); }
@@ -2479,7 +2483,7 @@ function posDrawReceipt(){
     +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
     +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
-    +'<div class="row" style="justify-content:space-between"><span>บิล #ใหม่</span><span>'+esc(ch?ch.name:'')+'</span></div>'
+    +'<div class="row" style="justify-content:space-between"><span>บิล #'+(POS.previewBillNo? String(POS.previewBillNo).padStart(4,'0') : 'ใหม่')+'</span><span>'+esc(ch?ch.name:'')+'</span></div>'
     +(POS.custName? '<div>ลูกค้า: '+esc(POS.custName)+'</div>':'')
     +'<hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'+itemsHtml+'<hr style="border:none;border-top:2px solid #333;margin:8px 0 4px">'
     +'<div class="row" style="justify-content:space-between;font-weight:700"><span>รวมสุทธิ</span><span>'+fmtMoney(sub)+'</span></div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
@@ -2534,7 +2538,7 @@ function posCloseBill(){
     return api('pos_bill_items', {method:'POST', body: items}).then(function(){
       audit('close','pos_bill', bill.id, {total:sub, channel: ch?ch.name:null});
       POS.lastBill = Object.assign({}, bill, {total:sub});
-      POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null;
+      POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null; POS.previewBillNo=null;
       nav('/pos/done');
     });
   }).catch(function(e){ toast('บันทึกบิลไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
