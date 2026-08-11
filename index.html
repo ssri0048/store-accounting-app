@@ -2532,15 +2532,6 @@ function posCloseBill(){
     var bill = rows && rows[0]; if(!bill) throw new Error('ไม่ได้รับข้อมูลบิลที่บันทึก');
     var items = POS.cart.map(function(c){ return {bill_id:bill.id, menu_item_id:c.menuId, item_name:c.name, unit_price:c.price, qty:c.qty, line_total:c.price*c.qty}; });
     return api('pos_bill_items', {method:'POST', body: items}).then(function(){
-      return api('transactions', {method:'POST', body:{
-        txn_type:'income', txn_date: todayISO(), amount: sub,
-        channel: ch? ch.name : null, party_name: POS.custName||null,
-        description: 'บิล POS #'+bill.bill_no, source:'pos', created_by: S.user||'unknown'
-      }, prefer:'return=representation'});
-    }).then(function(txnRows){
-      var txn = txnRows && txnRows[0];
-      if(txn) return api('pos_bills?id=eq.'+bill.id, {method:'PATCH', body:{linked_transaction_id:txn.id}});
-    }).then(function(){
       audit('close','pos_bill', bill.id, {total:sub, channel: ch?ch.name:null});
       POS.lastBill = Object.assign({}, bill, {total:sub});
       POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null;
