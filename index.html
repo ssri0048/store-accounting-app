@@ -2451,7 +2451,7 @@ function posRenderPreview(){
   var pchips = Object.keys(POS_PAPER_W).map(function(p){ return '<button class="chip '+(POS.paper===p?'on':'')+'" onclick="posSetPaper(\''+p+'\')">'+p+'</button>'; }).join('');
   var cashOn = !!(S.pos_shop && S.pos_shop.cash_enabled);
   V('<div class="chips">'+pchips+'</div>'
-    +'<div class="row" style="gap:10px;margin-top:6px;align-items:center"><span class="help" style="white-space:nowrap;margin:0">ขนาดตัวอักษร</span><input type="range" min="10" max="18" step="1" value="'+(POS.fontSize||12)+'" oninput="posSetFontSize(this.value)" style="flex:1"><span id="posFontSizeLabel" class="help" style="width:36px;text-align:right;margin:0">'+(POS.fontSize||12)+'px</span></div>'
+    +'<div class="row" style="gap:10px;margin-top:10px;align-items:center"><span class="help" style="white-space:nowrap;margin:0">ขนาดตัวอักษร</span><input type="range" min="10" max="18" step="1" value="'+(POS.fontSize||12)+'" oninput="posSetFontSize(this.value)" style="flex:1"><span id="posFontSizeLabel" class="help" style="width:36px;text-align:right;margin:0">'+(POS.fontSize||12)+'px</span></div>'
     +'<label>ชื่อลูกค้า (ไม่บังคับ)</label><input id="posCust" value="'+esc(POS.custName)+'" oninput="posField(\'custName\',this.value)">'
     +'<label>ข้อความท้ายบิล</label><input id="posComment" value="'+esc(POS.comment)+'" oninput="posField(\'comment\',this.value)">'
     + (cashOn? '<div class="grid2"><div><label>รับเงินมา</label><input type="number" id="posCash" oninput="posCashInput(this.value)"></div><div><label>เงินทอน</label><input id="posChange" disabled></div></div>' : '')
