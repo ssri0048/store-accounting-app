@@ -2480,7 +2480,7 @@ function posDrawReceipt(){
   var ch = POS.channels.find(function(c){return c.id===POS.channelId;});
   var itemsHtml = POS.cart.map(function(c){ return '<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px dotted #ddd"><span>'+esc(c.name)+' x'+c.qty+'</span><span>'+ (c.price*c.qty).toFixed(2) +'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
-  box.innerHTML = '<div class="receiptBox" style="position:relative;background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+  box.innerHTML = '<div class="receiptBox" style="position:relative;background:#fff;padding:10px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
     +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div>'
     +'<div style="text-align:center;font-size:.9em">'+esc((S.pos_shop&&S.pos_shop.address)||'')+'</div>'
@@ -2515,7 +2515,7 @@ function posDrawReceiptFromBill(box){
   var b = POS_HIST_BILL.bill, items = POS_HIST_BILL.items;
   var itemsHtml = items.map(function(c){ return '<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px dotted #ddd"><span>'+esc(c.item_name)+' x'+c.qty+'</span><span>'+Number(c.line_total).toFixed(2)+'</span></div>'; }).join('') || '<div class="help">— ยังไม่มีรายการ —</div>';
   var logoUrl = (S.pos_shop&&S.pos_shop.logo_url)||'';
-  box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:16px 14px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
+  box.innerHTML = '<div class="receiptBox" style="background:#fff;padding:10px;font-family:\'Courier New\',monospace;line-height:1.5;font-size:'+(POS.fontSize||12)+'px;width:'+(POS_PAPER_W[POS.paper]||220)+'px">'
     +(logoUrl? '<div style="text-align:center;margin-bottom:6px"><img src="'+logoUrl+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px"></div>' : '')
     +'<div style="text-align:center;font-weight:700">'+esc((S.pos_shop&&S.pos_shop.name)||S.store.name||'ร้านค้า')+'</div><hr style="border:none;border-top:1px dashed #bbb;margin:8px 0">'
     +'<div class="row" style="justify-content:space-between"><span>บิล #'+String(b.bill_no).padStart(4,'0')+'</span><span>'+(b.pos_channels?esc(b.pos_channels.name):'')+'</span></div>'
