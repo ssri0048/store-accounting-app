@@ -2427,7 +2427,7 @@ function posSumLoad(){
     });
     var list=Object.keys(map).map(function(k){ return {name:k, qty:map[k]}; });
     list.sort(function(a,b){ return b.qty-a.qty || a.name.localeCompare(b.name,'th'); });
-    POS._sum={bills:(rows||[]).length, amount:amount, units:units, list:list, at:Date.now()};
+    POS._sum={bills:(rows||[]).length, amount:amount, units:units, list:list, day:todayISO(), at:Date.now()};
     return POS._sum;
   });
 }
@@ -2466,7 +2466,7 @@ function posSumHtml(){
 function posSumPaint(){ var el=document.getElementById('posSumBox'); if(el) el.outerHTML = posSumHtml(); }
 function posSumToggle(){ POS._sumOpen = !POS._sumOpen; posSumPaint(); if(POS._sumOpen) posSumLoad().then(posSumPaint).catch(function(){}); }
 function posSumRefresh(){
-  if(POS._sum && (Date.now()-POS._sum.at) < 20000){ posSumPaint(); return; }
+  if(POS._sum && POS._sum.day === todayISO()){ posSumPaint(); return; }
   posSumLoad().then(posSumPaint).catch(function(){
     var el=document.getElementById('posSumBox');
     if(el) el.outerHTML = '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">ยังดูสรุปวันนี้ไม่ได้ตอนนี้</span></div>';
@@ -2628,7 +2628,7 @@ function posCloseBill(){
       audit('close','pos_bill', bill.id, {total:sub, channel: ch?ch.name:null});
       POS.lastBill = Object.assign({}, bill, {total:sub});
       POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null; POS.previewBillNo=null;
-      nav('/pos/done');
+      POS._sum=null; nav('/pos/done');
     });
   }).catch(function(e){ toast('บันทึกบิลไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
 }
@@ -2705,7 +2705,7 @@ function posVoidBill(id){
   if(!confirm('ยกเลิกบิลนี้ใช่หรือไม่? บิลจะยังอยู่ในประวัติแต่จะถูกทำเครื่องหมายว่ายกเลิกแล้ว')) return;
   api('pos_bills?id=eq.'+id, {method:'PATCH', body:{status:'void'}}).then(function(){
     audit('void','pos_bill', id, {});
-    toast('ยกเลิกบิลแล้ว');
+    POS._sum=null; toast('ยกเลิกบิลแล้ว');
     posRenderHistoryDetail(id);
   }).catch(function(e){ toast('ยกเลิกไม่สำเร็จ: '+(e&&e.message||'')); });
 }
