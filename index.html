@@ -2408,13 +2408,45 @@ function posRenderHome(){
   posSetNavOn('pos');
   posSumRefresh();
 }
-function posSumRange(){
-  var s=new Date(); s.setHours(0,0,0,0);
+function posSumIso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function posSumDay(){ return POS._sumDay || todayISO(); }
+function posSumMinDay(){ var d=new Date(); d.setDate(d.getDate()-6); return posSumIso(d); }
+function posSumShortTxt(){
+  var day=posSumDay(); if(day===todayISO()) return 'วันนี้';
+  var d=new Date(day+'T00:00:00');
+  var m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return d.getDate()+' '+m[d.getMonth()];
+}
+function posSumSetDay(v){
+  if(!v) return;
+  var mn=posSumMinDay(), mx=todayISO();
+  if(v<mn) v=mn; if(v>mx) v=mx;
+  POS._sumDay=v; POS._sum=null; posSumPaint();
+  posSumLoad().then(posSumPaint).catch(function(){});
+}
+function posSumStep(n){
+  var d=new Date(posSumDay()+'T00:00:00'); d.setDate(d.getDate()+n);
+  posSumSetDay(posSumIso(d));
+}
+function posSumHeadHtml(){
+  var day=posSumDay(), mn=posSumMinDay(), mx=todayISO();
+  var bs='border:1px solid var(--line);background:#fff;border-radius:6px;width:26px;height:26px;font-size:15px;line-height:1;padding:0;cursor:pointer;color:var(--txt)';
+  return '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:5px"><b style="font-size:13px">สรุปยอดขาย</b>'
+    +'<span style="display:flex;gap:4px;align-items:center">'
+    +'<button onclick="posSumStep(-1)" '+(day<=mn?'disabled style="opacity:.35;'+bs+'"':'style="'+bs+'"')+'>‹</button>'
+    +'<input type="date" value="'+day+'" min="'+mn+'" max="'+mx+'" onchange="posSumSetDay(this.value)" style="width:134px;margin:0;padding:3px 6px;font-size:11px;border:1px solid var(--line);border-radius:6px;display:inline-block;box-sizing:border-box">'
+    +'<button onclick="posSumStep(1)" '+(day>=mx?'disabled style="opacity:.35;'+bs+'"':'style="'+bs+'"')+'>›</button>'
+    +'</span></div>'
+    +'<div class="help" style="margin:0 0 10px;font-size:10.5px">'+posSumDateTxt()+'</div>';
+}
+function posSumRange(day){
+  var s=new Date(day+'T00:00:00');
   var e=new Date(s); e.setDate(e.getDate()+1);
   return {s:s.toISOString(), e:e.toISOString()};
 }
 function posSumLoad(){
-  var r=posSumRange();
+  var day=posSumDay();
+  var r=posSumRange(day);
   return api('pos_bills?select=id,total,pos_bill_items(item_name,qty)&status=eq.closed&closed_at=gte.'+encodeURIComponent(r.s)+'&closed_at=lt.'+encodeURIComponent(r.e)).then(function(rows){
     var amount=0, units=0, map={};
     (rows||[]).forEach(function(b){
@@ -2427,22 +2459,25 @@ function posSumLoad(){
     });
     var list=Object.keys(map).map(function(k){ return {name:k, qty:map[k]}; });
     list.sort(function(a,b){ return b.qty-a.qty || a.name.localeCompare(b.name,'th'); });
-    POS._sum={bills:(rows||[]).length, amount:amount, units:units, list:list, day:todayISO(), at:Date.now()};
+    POS._sum={bills:(rows||[]).length, amount:amount, units:units, list:list, day:day, at:Date.now()};
     return POS._sum;
   });
 }
 function posSumDateTxt(){
-  var d=new Date();
+  var d=new Date(posSumDay()+'T00:00:00');
   var m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  return d.getDate()+' '+m[d.getMonth()]+' '+(d.getFullYear()+543);
+  return (posSumDay()===todayISO()?'วันนี้ · ':'')+d.getDate()+' '+m[d.getMonth()]+' '+(d.getFullYear()+543);
 }
 function posSumHtml(){
   var s=POS._sum;
-  if(!s) return '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">กำลังโหลดสรุปวันนี้…</span></div>';
+  if(!s){
+    if(!POS._sumOpen) return '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">กำลังโหลดสรุป…</span></div>';
+    return '<div id="posSumBox" class="card" style="padding:12px;margin-bottom:10px">'+posSumHeadHtml()+'<div class="help" style="margin:10px 0">กำลังโหลด…</div></div>';
+  }
   if(!POS._sumOpen){
     return '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px;cursor:pointer" onclick="posSumToggle()">'
       +'<div class="row" style="justify-content:space-between;align-items:center">'
-      +'<span style="font-size:12px;font-weight:600">วันนี้ · '+s.bills+' บิล · '+fmtMoney0(s.amount)+' · '+s.units+' หน่วย</span>'
+      +'<span style="font-size:12px;font-weight:600">'+posSumShortTxt()+' · '+s.bills+' บิล · '+fmtMoney0(s.amount)+' · '+s.units+' หน่วย</span>'
       +'<span style="font-size:11px;color:var(--green-dk);font-weight:600;white-space:nowrap">ดูรายละเอียด ⌄</span>'
       +'</div></div>';
   }
@@ -2452,7 +2487,7 @@ function posSumHtml(){
       }).join('')
     : '<div class="help" style="margin:6px 0">ยังไม่มีบิลที่ปิดวันนี้</div>';
   return '<div id="posSumBox" class="card" style="padding:12px;margin-bottom:10px">'
-    +'<div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:10px"><b style="font-size:13px">สรุปวันนี้</b><span class="help" style="margin:0;font-size:10.5px">'+posSumDateTxt()+'</span></div>'
+    +posSumHeadHtml()
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:11px">'
     +'<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green-dk)">'+s.bills+'</div><div style="font-size:10px;color:var(--mut)">บิล</div></div>'
     +'<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green-dk)">'+fmtMoney0(s.amount)+'</div><div style="font-size:10px;color:var(--mut)">ยอดรวม</div></div>'
@@ -2466,7 +2501,7 @@ function posSumHtml(){
 function posSumPaint(){ var el=document.getElementById('posSumBox'); if(el) el.outerHTML = posSumHtml(); }
 function posSumToggle(){ POS._sumOpen = !POS._sumOpen; posSumPaint(); if(POS._sumOpen) posSumLoad().then(posSumPaint).catch(function(){}); }
 function posSumRefresh(){
-  if(POS._sum && POS._sum.day === todayISO()){ posSumPaint(); return; }
+  if(POS._sum && POS._sum.day === posSumDay()){ posSumPaint(); return; }
   posSumLoad().then(posSumPaint).catch(function(){
     var el=document.getElementById('posSumBox');
     if(el) el.outerHTML = '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">ยังดูสรุปวันนี้ไม่ได้ตอนนี้</span></div>';
@@ -2628,7 +2663,7 @@ function posCloseBill(){
       audit('close','pos_bill', bill.id, {total:sub, channel: ch?ch.name:null});
       POS.lastBill = Object.assign({}, bill, {total:sub});
       POS.cart=[]; POS.custName=''; POS.comment='ขอบคุณที่อุดหนุนค่ะ 🙏'; POS.cashReceived=null; POS.previewBillNo=null;
-      POS._sum=null; nav('/pos/done');
+      POS._sum=null; POS._sumDay=null; nav('/pos/done');
     });
   }).catch(function(e){ toast('บันทึกบิลไม่สำเร็จ: '+(e&&e.message||'ลองใหม่')); });
 }
@@ -2705,7 +2740,7 @@ function posVoidBill(id){
   if(!confirm('ยกเลิกบิลนี้ใช่หรือไม่? บิลจะยังอยู่ในประวัติแต่จะถูกทำเครื่องหมายว่ายกเลิกแล้ว')) return;
   api('pos_bills?id=eq.'+id, {method:'PATCH', body:{status:'void'}}).then(function(){
     audit('void','pos_bill', id, {});
-    POS._sum=null; toast('ยกเลิกบิลแล้ว');
+    POS._sum=null; POS._sumDay=null; toast('ยกเลิกบิลแล้ว');
     posRenderHistoryDetail(id);
   }).catch(function(e){ toast('ยกเลิกไม่สำเร็จ: '+(e&&e.message||'')); });
 }
