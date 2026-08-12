@@ -2430,11 +2430,11 @@ function posSumStep(n){
 }
 function posSumHeadHtml(){
   var day=posSumDay(), mn=posSumMinDay(), mx=todayISO();
-  var bs='border:1px solid var(--line);background:#fff;border-radius:6px;width:26px;height:26px;font-size:15px;line-height:1;padding:0;cursor:pointer;color:var(--txt)';
+  var bs='border:1px solid var(--line);background:#fff;border-radius:6px;width:28px;height:28px;font-size:15px;line-height:1;padding:0;cursor:pointer;color:var(--txt);display:flex;align-items:center;justify-content:center';
   return '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:5px"><b style="font-size:13px">สรุปยอดขาย</b>'
     +'<span style="display:flex;gap:4px;align-items:center">'
     +'<button onclick="posSumStep(-1)" '+(day<=mn?'disabled style="opacity:.35;'+bs+'"':'style="'+bs+'"')+'>‹</button>'
-    +'<input type="date" value="'+day+'" min="'+mn+'" max="'+mx+'" onchange="posSumSetDay(this.value)" style="width:134px;margin:0;padding:3px 6px;font-size:11px;border:1px solid var(--line);border-radius:6px;display:inline-block;box-sizing:border-box">'
+    +'<input type="date" value="'+day+'" min="'+mn+'" max="'+mx+'" onchange="posSumSetDay(this.value)" style="width:140px;margin:0;padding:0 4px;height:28px;line-height:28px;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);border-radius:6px;display:inline-block;box-sizing:border-box">'
     +'<button onclick="posSumStep(1)" '+(day>=mx?'disabled style="opacity:.35;'+bs+'"':'style="'+bs+'"')+'>›</button>'
     +'</span></div>'
     +'<div class="help" style="margin:0 0 10px;font-size:10.5px">'+posSumDateTxt()+'</div>';
