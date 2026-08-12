@@ -2403,9 +2403,74 @@ function posRenderHome(){
   var n = POS.cart.reduce(function(a,c){return a+c.qty;},0);
   var sub = POS.cart.reduce(function(a,c){return a+c.qty*c.price;},0);
   var fabTxt = n? ('บิลนี้ · '+n+' รายการ · '+fmtMoney0(sub)) : 'บิลว่าง · แตะเมนูเพื่อเริ่ม';
-  V(chH + catH + grid + '<div style="height:80px"></div>'
+  V(posSumHtml() + chH + catH + grid + '<div style="height:80px"></div>'
     + '<button class="btn btn-p btn-block" style="position:fixed;left:14px;right:14px;bottom:calc(var(--nav-h) + 14px + env(safe-area-inset-bottom));width:auto;box-sizing:border-box;max-width:730px;margin:0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="nav(\'/pos/bill\')">🧾 '+esc(fabTxt)+'</button>');
   posSetNavOn('pos');
+  posSumRefresh();
+}
+function posSumRange(){
+  var s=new Date(); s.setHours(0,0,0,0);
+  var e=new Date(s); e.setDate(e.getDate()+1);
+  return {s:s.toISOString(), e:e.toISOString()};
+}
+function posSumLoad(){
+  var r=posSumRange();
+  return api('pos_bills?select=id,total,pos_bill_items(item_name,qty)&status=eq.closed&closed_at=gte.'+encodeURIComponent(r.s)+'&closed_at=lt.'+encodeURIComponent(r.e)).then(function(rows){
+    var amount=0, units=0, map={};
+    (rows||[]).forEach(function(b){
+      amount += Number(b.total)||0;
+      (b.pos_bill_items||[]).forEach(function(it){
+        var q=Number(it.qty)||0; units+=q;
+        var k=it.item_name||'(ไม่ระบุชื่อ)';
+        map[k]=(map[k]||0)+q;
+      });
+    });
+    var list=Object.keys(map).map(function(k){ return {name:k, qty:map[k]}; });
+    list.sort(function(a,b){ return b.qty-a.qty || a.name.localeCompare(b.name,'th'); });
+    POS._sum={bills:(rows||[]).length, amount:amount, units:units, list:list, at:Date.now()};
+    return POS._sum;
+  });
+}
+function posSumDateTxt(){
+  var d=new Date();
+  var m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return d.getDate()+' '+m[d.getMonth()]+' '+(d.getFullYear()+543);
+}
+function posSumHtml(){
+  var s=POS._sum;
+  if(!s) return '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">กำลังโหลดสรุปวันนี้…</span></div>';
+  if(!POS._sumOpen){
+    return '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px;cursor:pointer" onclick="posSumToggle()">'
+      +'<div class="row" style="justify-content:space-between;align-items:center">'
+      +'<span style="font-size:12px;font-weight:600">วันนี้ · '+s.bills+' บิล · '+fmtMoney0(s.amount)+' · '+s.units+' หน่วย</span>'
+      +'<span style="font-size:11px;color:var(--green-dk);font-weight:600;white-space:nowrap">ดูรายละเอียด ⌄</span>'
+      +'</div></div>';
+  }
+  var rows = s.list.length
+    ? s.list.map(function(i){
+        return '<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--line);font-size:12px"><span>'+esc(i.name)+'</span><span style="font-weight:700;white-space:nowrap">'+i.qty+' หน่วย</span></div>';
+      }).join('')
+    : '<div class="help" style="margin:6px 0">ยังไม่มีบิลที่ปิดวันนี้</div>';
+  return '<div id="posSumBox" class="card" style="padding:12px;margin-bottom:10px">'
+    +'<div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:10px"><b style="font-size:13px">สรุปวันนี้</b><span class="help" style="margin:0;font-size:10.5px">'+posSumDateTxt()+'</span></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:11px">'
+    +'<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green-dk)">'+s.bills+'</div><div style="font-size:10px;color:var(--mut)">บิล</div></div>'
+    +'<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green-dk)">'+fmtMoney0(s.amount)+'</div><div style="font-size:10px;color:var(--mut)">ยอดรวม</div></div>'
+    +'<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green-dk)">'+s.units+'</div><div style="font-size:10px;color:var(--mut)">หน่วย</div></div>'
+    +'</div>'
+    +'<div class="help" style="margin:0 0 7px">ขายไปแล้ววันนี้ · รวมทุกช่องทาง</div>'
+    + rows
+    +'<div class="row" style="justify-content:space-between;margin-top:9px"><span class="help" style="margin:0;font-size:10px">ไม่นับบิลที่ยกเลิกแล้ว</span><span onclick="posSumToggle()" style="font-size:11px;color:var(--green-dk);font-weight:600;cursor:pointer">ซ่อน ⌃</span></div>'
+    +'</div>';
+}
+function posSumPaint(){ var el=document.getElementById('posSumBox'); if(el) el.outerHTML = posSumHtml(); }
+function posSumToggle(){ POS._sumOpen = !POS._sumOpen; posSumPaint(); if(POS._sumOpen) posSumLoad().then(posSumPaint).catch(function(){}); }
+function posSumRefresh(){
+  if(POS._sum && (Date.now()-POS._sum.at) < 20000){ posSumPaint(); return; }
+  posSumLoad().then(posSumPaint).catch(function(){
+    var el=document.getElementById('posSumBox');
+    if(el) el.outerHTML = '<div id="posSumBox" class="card" style="padding:9px 11px;margin-bottom:10px"><span class="help" style="margin:0">ยังดูสรุปวันนี้ไม่ได้ตอนนี้</span></div>';
+  });
 }
 function posSetChannel(id){ POS.channelId=id; posRenderHome(); }
 function posSetCat(c){ POS.cat=c; posRenderHome(); }
