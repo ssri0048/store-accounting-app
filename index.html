@@ -2681,6 +2681,11 @@ function posRenderDone(){
 }
 function posViewLastBill(){ if(POS.lastBill) posRenderHistoryDetail(POS.lastBill.id); }
 
+function posNameTag(n){
+  var s=String(n||'').trim();
+  if(!s) return '';
+  return ' <span class="badge b-mut" style="font-weight:600;vertical-align:middle">'+esc(s.slice(0,8))+(s.length>8?'…':'')+'</span>';
+}
 function posRenderHistory(){
   setTop('ประวัติบิล', true);
   V('<div class="searchbar"><input id="posHistQ" placeholder="ค้นหาเลขบิล หรือชื่อลูกค้า..." value="'+esc(POS_HIST_Q)+'" oninput="posHistSearch(this.value)"></div>'
@@ -2711,7 +2716,7 @@ function posHistLoad(){
     list.innerHTML = f.map(function(r){
       var badge = r.status==='void'? '<span class="badge b-err">ยกเลิกแล้ว</span>' : '<span class="badge b-ok">ชำระแล้ว</span>';
       return '<div class="item" style="cursor:pointer" onclick="posRenderHistoryDetail(\''+r.id+'\')">'
-        +'<div class="ic ic-in">🧾</div><div class="main"><div class="t1">บิล #'+String(r.bill_no).padStart(4,'0')+'</div>'
+        +'<div class="ic ic-in">🧾</div><div class="main"><div class="t1">บิล #'+String(r.bill_no).padStart(4,'0')+posNameTag(r.customer_name)+'</div>'
         +'<div class="t2">'+fmtDate(r.closed_at)+' · '+(r.pos_channels?esc(r.pos_channels.name):'')+'</div></div>'
         +'<div style="text-align:right"><b>'+fmtMoney(r.total)+'</b><br>'+badge+'</div></div>';
     }).join('');
