@@ -1287,6 +1287,7 @@ routes.settings = function(){
     + '<label>เลขประจำตัวผู้เสียภาษี</label><input inputmode="numeric" id="st_tax" value="'+esc(st.tax_id||'')+'">'
     + '<div class="grid2"><div><label>เบอร์โทร</label><input inputmode="tel" id="st_phone" value="'+esc(st.phone||'')+'"></div>'
     + '<div><label>สาขา</label><input id="st_branch" value="'+esc(st.branch||'')+'"></div></div>'
+    + '<label>ที่อยู่ร้าน</label><input id="st_address" placeholder="เช่น 123/45 ถ.สุขุมวิท แขวง... เขต... กรุงเทพฯ 10110" value="'+esc(st.address||'')+'">'
     + '</div>'
     + '<div class="card"><b>การแสดงผล</b>'
     + '<label>รูปแบบปี</label><div class="chips">'
@@ -1303,7 +1304,7 @@ function setYear(v){ S.prefs.year_format=v; routes.settings(); }
 function saveSettings(){
   function gv(x){ return document.getElementById(x).value.trim(); }
   S.store.name=gv('st_name')||'My Store Accounting'; S.store.owner=gv('st_owner');
-  S.store.tax_id=gv('st_tax'); S.store.phone=gv('st_phone'); S.store.branch=gv('st_branch');
+  S.store.tax_id=gv('st_tax'); S.store.phone=gv('st_phone'); S.store.branch=gv('st_branch'); S.store.address=gv('st_address');
   S.prefs.vat_enabled=document.getElementById('st_vat').checked;
   S.prefs.vat_rate=parseFloat(gv('st_vatrate'))||7;
   Promise.all([
