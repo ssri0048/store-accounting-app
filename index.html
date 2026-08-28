@@ -2211,6 +2211,18 @@ function thaiBaht(n){
   s+= st? thaiNum(st)+'สตางค์' : 'ถ้วน';
   return s;
 }
+function cvFitText(c,text,cx,y,maxW,maxPx,minPx,bold){
+  var px=maxPx;
+  c.textAlign='center';
+  while(px>minPx){
+    c.font=(bold?'bold ':'')+px+'px sans-serif';
+    if(c.measureText(text).width<=maxW) break;
+    px--;
+  }
+  c.font=(bold?'bold ':'')+px+'px sans-serif';
+  c.fillText(text,cx,y);
+  return px;
+}
 function cvWrap(c,text,x,y,maxW,lh){
   var s=String(text||''), lineTxt='';
   for(var i=0;i<s.length;i++){
@@ -2254,11 +2266,13 @@ function certGen(btn){
   var c=cv.getContext('2d');
   c.fillStyle='#fff'; c.fillRect(0,0,1000,1414);
   c.strokeStyle='#333'; c.lineWidth=2; c.strokeRect(40,40,920,1334);
-  c.fillStyle='#111'; c.textAlign='center';
-  c.font='bold 44px sans-serif'; c.fillText('ใบรับรองแทนใบเสร็จรับเงิน',500,140);
-  c.font='30px sans-serif'; c.fillText(shop,500,200);
+  c.fillStyle='#111';
+  cvFitText(c,'ใบรับรองแทนใบเสร็จรับเงิน',500,120,800,44,26,true);
+  cvFitText(c,shop,500,168,800,30,18,false);
+  var certAddr=(S.store.address||'').trim();
+  var y=250;
+  if(certAddr){ cvFitText(c,certAddr,500,205,800,20,13,false); y=275; }
   c.textAlign='left';
-  var y=290;
   function ln(k,v){ c.font='bold 28px sans-serif'; c.fillText(k,100,y); c.font='28px sans-serif'; y=cvWrap(c,v,340,y,560,44); y+=54; }
   ln('วันที่จ่ายเงิน', fmtDate(r.txn_date));
   ln('รายการ', desc);
