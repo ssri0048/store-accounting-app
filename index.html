@@ -445,13 +445,21 @@ function loadPeriodCard(){
     body.innerHTML = '<div class="help">โหลดข้อมูลช่วงนี้ไม่ได้</div>';
   });
 }
+function txnDescTag(r){
+  var d=String(r.description||'').trim();
+  if(!d) return '';
+  var main=String(r.party_name||r.category_name||'').trim();
+  if(d===main) return '';
+  var short=d.slice(0,16)+(d.length>16?'…':'');
+  return ' <span class="badge b-mut" style="font-weight:500;vertical-align:middle">'+esc(short)+'</span>';
+}
 function txnItem(r){
   var isIn = (r.txn_type==='income'||r.txn_type==='sale'||r.txn_type==='transfer_in');
   var st = r.review_status==='pending' ? '<span class="badge b-warn">รอตรวจ</span>' : '';
   var nb = (r.document_id===null && (r.txn_type==='expense'||r.txn_type==='purchase')) ? ' <span class="badge b-warn">🧾 ไม่มีบิล</span>' : '';
   return '<div class="item" onclick="openTxn(\''+r.id+'\')">'
     + '<div class="ic '+(isIn?'ic-in':'ic-ex')+'">'+(isIn?'💰':'🧾')+'</div>'
-    + '<div class="main"><div class="t1">'+esc(r.party_name||r.category_name||r.description||'-')+'</div>'
+    + '<div class="main"><div class="t1">'+esc(r.party_name||r.category_name||r.description||'-')+txnDescTag(r)+'</div>'
     + '<div class="t2">'+fmtDate(r.txn_date)+' · '+esc(r.category_name||'')+' '+st+nb+'</div></div>'
     + '<div class="amt '+(isIn?'pos':'neg')+'">'+(isIn?'+':'−')+'฿'+fmtMoney0(r.amount)+'</div></div>';
 }
